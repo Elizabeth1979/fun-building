@@ -145,7 +145,7 @@ describe('rotatePlacedItem', () => {
   it('stacks rotations on repeated calls', () => {
     const once = rotatePlacedItem(items, items[0].id)
     const twice = rotatePlacedItem(once, items[0].id)
-    expect(twice[0].rotation).toBeCloseTo(Math.PI / 2)
+    expect(twice[0].rotation).toBeCloseTo(Math.PI)
   })
 
   it('does not mutate original item objects', () => {
