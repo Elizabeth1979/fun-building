@@ -10,9 +10,10 @@ import { useGodMode } from './useGodMode'
 import { useGameMode } from './useGameMode'
 import { usePhysics } from './usePhysics'
 import type { FurnitureItem } from './furniture'
-import { FURNITURE_DIMS, catalogIdOf } from './furniture'
+import { FURNITURE_CATALOG, FURNITURE_DIMS, catalogIdOf } from './furniture'
+import { loadModel } from './modelLoader'
 
-function buildFurnitureMesh(item: FurnitureItem): THREE.Mesh {
+function buildFallbackMesh(item: FurnitureItem): THREE.Mesh {
   const catalogId = catalogIdOf(item)
   const dims = FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]
 
@@ -35,6 +36,64 @@ function buildFurnitureMesh(item: FurnitureItem): THREE.Mesh {
   return mesh
 }
 
+async function buildFurnitureModel(item: FurnitureItem): Promise<THREE.Object3D> {
+  const catalogId = catalogIdOf(item)
+  const catalogEntry = FURNITURE_CATALOG.find(c => c.id === catalogId)
+  const modelPath = item.modelPath ?? catalogEntry?.modelPath
+
+  if (!modelPath) return buildFallbackMesh(item)
+
+  try {
+    const group = await loadModel(modelPath)
+    group.position.set(item.position.x, item.position.y, item.position.z)
+    group.rotation.y = item.rotation
+    return group
+  } catch {
+    return buildFallbackMesh(item)
+  }
+}
+
+function setEmissiveOnObject(obj: THREE.Object3D, color: number): void {
+  obj.traverse(child => {
+    if (child instanceof THREE.Mesh) {
+      const mat = child.material
+      if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
+        mat.emissive.set(color)
+      }
+    }
+  })
+}
+
+function disposeObject(obj: THREE.Object3D): void {
+  obj.traverse(child => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose()
+      if (Array.isArray(child.material)) {
+        child.material.forEach(m => m.dispose())
+      } else {
+        child.material.dispose()
+      }
+    }
+  })
+}
+
+function findFurnitureParent(
+  hit: THREE.Object3D,
+  meshes: Map<string, THREE.Object3D>,
+): string | null {
+  const roots = new Set(meshes.values())
+  let current: THREE.Object3D | null = hit
+  while (current) {
+    if (roots.has(current)) {
+      for (const [id, obj] of meshes) {
+        if (obj === current) return id
+      }
+    }
+    current = current.parent
+  }
+  return null
+}
+
 export default function App() {
   const isGodMode = useGodMode()
   const { mode, toggle } = useGameMode()
@@ -53,7 +112,7 @@ export default function App() {
 
   // Scene + mesh refs shared between effects and event handlers
   const sceneRef = useRef<THREE.Scene | null>(null)
-  const furnitureMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map())
+  const furnitureMeshesRef = useRef<Map<string, THREE.Object3D>>(new Map())
 
   // Stable function refs — updated every render so event-handler closures stay fresh
   const moveItemRef = useRef(moveItem)
@@ -119,11 +178,10 @@ export default function App() {
     const liveIds = new Set(placedItems.map(i => i.id))
 
     // Remove meshes for deleted items
-    for (const [id, mesh] of meshes) {
+    for (const [id, obj] of meshes) {
       if (!liveIds.has(id)) {
-        scene.remove(mesh)
-        ;(mesh.material as THREE.MeshLambertMaterial).dispose()
-        mesh.geometry.dispose()
+        scene.remove(obj)
+        disposeObject(obj)
         meshes.delete(id)
       }
     }
@@ -135,18 +193,25 @@ export default function App() {
         existing.position.set(item.position.x, item.position.y, item.position.z)
         existing.rotation.y = item.rotation
       } else {
-        const mesh = buildFurnitureMesh(item)
-        scene.add(mesh)
-        meshes.set(item.id, mesh)
+        // Load model asynchronously; add to scene when ready
+        const itemId = item.id
+        buildFurnitureModel(item).then(obj => {
+          // Guard: item may have been removed while loading
+          if (!placedItemsRef.current.some(i => i.id === itemId)) {
+            disposeObject(obj)
+            return
+          }
+          scene.add(obj)
+          meshes.set(itemId, obj)
+        })
       }
     }
   }, [placedItems])
 
   // Sync selection → emissive highlight
   useEffect(() => {
-    for (const [id, mesh] of furnitureMeshesRef.current) {
-      const mat = mesh.material as THREE.MeshLambertMaterial
-      mat.emissive.set(id === selectedItemId ? 0x555500 : 0x000000)
+    for (const [id, obj] of furnitureMeshesRef.current) {
+      setEmissiveOnObject(obj, id === selectedItemId ? 0x555500 : 0x000000)
     }
   }, [selectedItemId])
 
@@ -221,10 +286,14 @@ export default function App() {
       if (isPlayModeRef.current) return // no dragging during physics
       toNDC(e)
       raycaster.setFromCamera(mouse, camera)
-      const hits = raycaster.intersectObjects(Array.from(furnitureMeshesRef.current.values()))
+      // Collect all child meshes for raycasting (GLTF models are groups)
+      const allMeshes: THREE.Object3D[] = []
+      for (const obj of furnitureMeshesRef.current.values()) {
+        obj.traverse(child => { if (child instanceof THREE.Mesh) allMeshes.push(child) })
+      }
+      const hits = raycaster.intersectObjects(allMeshes)
       if (hits.length > 0) {
-        const hitId = [...furnitureMeshesRef.current.entries()]
-          .find(([, m]) => m === hits[0].object)?.[0] ?? null
+        const hitId = findFurnitureParent(hits[0].object, furnitureMeshesRef.current)
         if (hitId) {
           setSelectedItemIdRef.current(hitId)
           isDragging = true
@@ -292,10 +361,9 @@ export default function App() {
       controls.dispose()
       roomGeo.dispose()
       ;[wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5].forEach(m => m.dispose())
-      for (const mesh of furnitureMeshesRef.current.values()) {
-        scene.remove(mesh)
-        ;(mesh.material as THREE.MeshLambertMaterial).dispose()
-        mesh.geometry.dispose()
+      for (const obj of furnitureMeshesRef.current.values()) {
+        scene.remove(obj)
+        disposeObject(obj)
       }
       furnitureMeshesRef.current.clear()
       renderer.dispose()

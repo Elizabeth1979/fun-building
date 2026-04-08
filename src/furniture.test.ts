@@ -40,9 +40,9 @@ describe('FURNITURE_CATALOG', () => {
     }
   })
 
-  it('each item has a positive y position (sits on the floor)', () => {
+  it('each item has a non-negative y position (sits on the floor)', () => {
     for (const item of FURNITURE_CATALOG) {
-      expect(item.position.y).toBeGreaterThan(0)
+      expect(item.position.y).toBeGreaterThanOrEqual(0)
     }
   })
 

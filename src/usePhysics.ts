@@ -80,19 +80,19 @@ export function usePhysics() {
    * Step the simulation one tick and sync body positions to Three.js meshes.
    * Call this from the animation loop when in play mode.
    */
-  function stepPhysics(meshes: Map<string, THREE.Mesh>): void {
+  function stepPhysics(meshes: Map<string, THREE.Object3D>): void {
     const state = stateRef.current
     if (!state) return
 
     state.world.step()
 
     for (const [id, body] of state.bodyMap) {
-      const mesh = meshes.get(id)
-      if (!mesh) continue
+      const obj = meshes.get(id)
+      if (!obj) continue
       const pos = body.translation()
-      mesh.position.set(pos.x, pos.y, pos.z)
+      obj.position.set(pos.x, pos.y, pos.z)
       const rot = body.rotation()
-      mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+      obj.quaternion.set(rot.x, rot.y, rot.z, rot.w)
     }
   }
 
