@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
@@ -111,11 +110,9 @@ export default function App() {
   const { initPhysics, stepPhysics, getFinalPositions, destroyPhysics } = usePhysics()
   const mountRef = useRef<HTMLDivElement>(null)
 
-  // Room color material refs
-  const wallMatsRef = useRef<THREE.MeshStandardMaterial[]>([])
-  const ceilingMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
-  const floorMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
-  const floorOverlayMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  // Modular room piece refs — separate arrays so wall / floor colors apply independently
+  const roomWallObjectsRef = useRef<THREE.Object3D[]>([])
+  const roomFloorObjectsRef = useRef<THREE.Object3D[]>([])
 
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
@@ -179,16 +176,24 @@ export default function App() {
     if (saved) setColors(saved)
   }
 
-  // Sync color state → Three.js materials
+  // Sync color state → modular room pieces
   useEffect(() => {
-    wallMatsRef.current.forEach(m => m.color.set(colors.walls))
+    for (const obj of roomWallObjectsRef.current) {
+      obj.traverse(child => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          child.material.color.set(colors.walls)
+        }
+      })
+    }
   }, [colors.walls])
   useEffect(() => {
-    ceilingMatRef.current?.color.set(colors.ceiling)
-  }, [colors.ceiling])
-  useEffect(() => {
-    floorMatRef.current?.color.set(colors.floor)
-    floorOverlayMatRef.current?.color.set(colors.floor)
+    for (const obj of roomFloorObjectsRef.current) {
+      obj.traverse(child => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          child.material.color.set(colors.floor)
+        }
+      })
+    }
   }, [colors.floor])
 
   // Sync placedItems → Three.js meshes (add / remove / reposition)
@@ -265,13 +270,9 @@ export default function App() {
     scene.background = new THREE.Color(0x87ceeb)
     sceneRef.current = scene
 
-    // PBR environment for soft ambient lighting on all MeshStandardMaterials
-    const pmremGenerator = new THREE.PMREMGenerator(renderer)
-    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture
-
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
+    // Lighting — no PMREMGenerator, just ambient + directional
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2)
     dirLight.position.set(5, 10, 5)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 1024
@@ -280,104 +281,157 @@ export default function App() {
     dirLight.shadow.camera.far = 50
     scene.add(dirLight)
 
-    // Room
-    const roomWidth = 10, roomHeight = 5, roomDepth = 10
-    const texLoader = new THREE.TextureLoader()
-    const baseUrl = import.meta.env.BASE_URL
+    // Build modular room from Kenney GLTF pieces
+    const roomWallObjects: THREE.Object3D[] = []
+    const roomFloorObjects: THREE.Object3D[] = []
 
-    // Wall textures
-    const loadWallTexture = (file: string) => {
-      const tex = texLoader.load(`${baseUrl}textures/${file}`)
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-      tex.repeat.set(3, 2)
-      return tex
+    async function buildModularRoom() {
+      // Load one of each piece to measure actual tile dimensions
+      const sampleFloor = await loadModel('/models/room/floorFull.glb')
+      const floorBox = new THREE.Box3().setFromObject(sampleFloor)
+      const floorSize = floorBox.getSize(new THREE.Vector3())
+      const tileW = floorSize.x // width of one floor tile
+      const tileD = floorSize.z // depth of one floor tile
+
+      const sampleWall = await loadModel('/models/room/wall.glb')
+      const wallBox = new THREE.Box3().setFromObject(sampleWall)
+      const wallSize = wallBox.getSize(new THREE.Vector3())
+      const wallW = wallSize.x // width of one wall segment
+
+      // Dispose measurement samples
+      disposeObject(sampleFloor)
+      disposeObject(sampleWall)
+
+      const roomHalf = 5 // room is 10×10, centered at origin
+
+      // Floor tiles — grid centered at origin
+      const tilesX = Math.round(roomHalf * 2 / tileW)
+      const tilesZ = Math.round(roomHalf * 2 / tileD)
+      for (let ix = 0; ix < tilesX; ix++) {
+        for (let iz = 0; iz < tilesZ; iz++) {
+          const tile = await loadModel('/models/room/floorFull.glb')
+          tile.position.set(
+            -roomHalf + tileW / 2 + ix * tileW,
+            0,
+            -roomHalf + tileD / 2 + iz * tileD,
+          )
+          tile.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+              child.receiveShadow = true
+            }
+          })
+          scene.add(tile)
+          roomFloorObjects.push(tile)
+        }
+      }
+
+      const wallSegments = Math.round(roomHalf * 2 / wallW)
+
+      // Helper: place a row of wall tiles
+      async function placeWallRow(
+        modelPath: string,
+        count: number,
+        getPosition: (i: number) => [number, number, number],
+        rotationY: number,
+        skipIndices?: Set<number>,
+        replacements?: Map<number, string>,
+      ) {
+        for (let i = 0; i < count; i++) {
+          if (skipIndices?.has(i)) continue
+          const path = replacements?.get(i) ?? modelPath
+          const piece = await loadModel(path)
+          const [px, py, pz] = getPosition(i)
+          piece.position.set(px, py, pz)
+          piece.rotation.y = rotationY
+          piece.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true
+              child.receiveShadow = true
+            }
+          })
+          scene.add(piece)
+          roomWallObjects.push(piece)
+        }
+      }
+
+      // Back wall (z = -roomHalf): faces +z (rotation 0)
+      await placeWallRow(
+        '/models/room/wall.glb',
+        wallSegments,
+        i => [-roomHalf + wallW / 2 + i * wallW, 0, -roomHalf],
+        0,
+      )
+
+      // Front wall (z = +roomHalf): faces -z (rotation PI)
+      // Center tile(s) use doorway for an entrance
+      const frontCenter = Math.floor(wallSegments / 2)
+      await placeWallRow(
+        '/models/room/wall.glb',
+        wallSegments,
+        i => [-roomHalf + wallW / 2 + i * wallW, 0, roomHalf],
+        Math.PI,
+        undefined,
+        new Map([[frontCenter, '/models/room/wallDoorwayWide.glb']]),
+      )
+
+      // Left wall (x = -roomHalf): faces +x (rotation PI/2)
+      await placeWallRow(
+        '/models/room/wall.glb',
+        wallSegments,
+        i => [-roomHalf, 0, -roomHalf + wallW / 2 + i * wallW],
+        Math.PI / 2,
+      )
+
+      // Right wall (x = +roomHalf): faces -x (rotation -PI/2)
+      await placeWallRow(
+        '/models/room/wall.glb',
+        wallSegments,
+        i => [roomHalf, 0, -roomHalf + wallW / 2 + i * wallW],
+        -Math.PI / 2,
+      )
+
+      // Corner pieces at the two back corners
+      for (const [cx, cz, cr] of [
+        [-roomHalf, -roomHalf, 0],
+        [roomHalf, -roomHalf, -Math.PI / 2],
+        [-roomHalf, roomHalf, Math.PI / 2],
+        [roomHalf, roomHalf, Math.PI],
+      ] as [number, number, number][]) {
+        const corner = await loadModel('/models/room/wallCorner.glb')
+        corner.position.set(cx, 0, cz)
+        corner.rotation.y = cr
+        corner.traverse(child => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+        scene.add(corner)
+        roomWallObjects.push(corner)
+      }
+
+      // Store refs for color updates
+      roomWallObjectsRef.current = roomWallObjects
+      roomFloorObjectsRef.current = roomFloorObjects
+
+      // Apply initial colors
+      for (const obj of roomWallObjects) {
+        obj.traverse(child => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            child.material.color.set(colors.walls)
+          }
+        })
+      }
+      for (const obj of roomFloorObjects) {
+        obj.traverse(child => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            child.material.color.set(colors.floor)
+          }
+        })
+      }
     }
-    const wallColorTex = loadWallTexture('wall_color.jpg')
-    const wallNormalTex = loadWallTexture('wall_normal.jpg')
-    const wallRoughTex = loadWallTexture('wall_roughness.jpg')
 
-    // Floor textures
-    const loadFloorTexture = (file: string) => {
-      const tex = texLoader.load(`${baseUrl}textures/${file}`)
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-      tex.repeat.set(4, 4)
-      return tex
-    }
-    const floorColorTex = loadFloorTexture('floor_color.jpg')
-    const floorNormalTex = loadFloorTexture('floor_normal.jpg')
-    const floorRoughTex = loadFloorTexture('floor_roughness.jpg')
-
-    const wallMat0 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const wallMat1 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xfaf8f5, side: THREE.BackSide })
-    const bottomMat = new THREE.MeshStandardMaterial({ color: 0xc8a96e, side: THREE.BackSide, map: floorColorTex, normalMap: floorNormalTex, roughnessMap: floorRoughTex })
-    const wallMat4 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const wallMat5 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-
-    wallMatsRef.current = [wallMat0, wallMat1, wallMat4, wallMat5]
-    ceilingMatRef.current = ceilingMat
-    floorMatRef.current = bottomMat
-
-    const roomGeo = new THREE.BoxGeometry(roomWidth, roomHeight, roomDepth)
-    const room = new THREE.Mesh(roomGeo, [wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5])
-    room.position.set(0, roomHeight / 2, 0)
-    room.castShadow = false
-    room.receiveShadow = true
-    scene.add(room)
-
-    // Baseboards — thin strips along each wall at floor level
-    const baseboardColor = 0x4a3728
-    const baseboardMat = new THREE.MeshStandardMaterial({ color: baseboardColor })
-    const baseboardH = 0.08
-    const baseboardD = 0.04
-    const baseboards: THREE.Mesh[] = []
-
-    // Front wall (z = roomDepth/2)
-    const bbFront = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, baseboardH, baseboardD), baseboardMat)
-    bbFront.position.set(0, baseboardH / 2, roomDepth / 2 - baseboardD / 2)
-    bbFront.castShadow = true
-    scene.add(bbFront)
-    baseboards.push(bbFront)
-
-    // Back wall (z = -roomDepth/2)
-    const bbBack = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, baseboardH, baseboardD), baseboardMat)
-    bbBack.position.set(0, baseboardH / 2, -(roomDepth / 2 - baseboardD / 2))
-    bbBack.castShadow = true
-    scene.add(bbBack)
-    baseboards.push(bbBack)
-
-    // Left wall (x = -roomWidth/2)
-    const bbLeft = new THREE.Mesh(new THREE.BoxGeometry(baseboardD, baseboardH, roomDepth), baseboardMat)
-    bbLeft.position.set(-(roomWidth / 2 - baseboardD / 2), baseboardH / 2, 0)
-    bbLeft.castShadow = true
-    scene.add(bbLeft)
-    baseboards.push(bbLeft)
-
-    // Right wall (x = roomWidth/2)
-    const bbRight = new THREE.Mesh(new THREE.BoxGeometry(baseboardD, baseboardH, roomDepth), baseboardMat)
-    bbRight.position.set(roomWidth / 2 - baseboardD / 2, baseboardH / 2, 0)
-    bbRight.castShadow = true
-    scene.add(bbRight)
-    baseboards.push(bbRight)
-
-    // Floor overlay plane — covers box-geometry edge seam
-    const floorOverlaySize = 9.8
-    const floorOverlayGeo = new THREE.PlaneGeometry(floorOverlaySize, floorOverlaySize)
-    const floorOverlayColorTex = loadFloorTexture('floor_color.jpg')
-    const floorOverlayNormalTex = loadFloorTexture('floor_normal.jpg')
-    const floorOverlayRoughTex = loadFloorTexture('floor_roughness.jpg')
-    const floorOverlayMat = new THREE.MeshStandardMaterial({
-      color: 0xc8a96e,
-      map: floorOverlayColorTex,
-      normalMap: floorOverlayNormalTex,
-      roughnessMap: floorOverlayRoughTex,
-    })
-    const floorOverlay = new THREE.Mesh(floorOverlayGeo, floorOverlayMat)
-    floorOverlay.rotation.x = -Math.PI / 2
-    floorOverlay.position.y = 0.001
-    floorOverlay.receiveShadow = true
-    scene.add(floorOverlay)
-    floorOverlayMatRef.current = floorOverlayMat
+    buildModularRoom()
 
     // Drag-and-drop raycasting state
     const raycaster = new THREE.Raycaster()
@@ -671,16 +725,11 @@ export default function App() {
       renderer.domElement.removeEventListener('mousemove', onMouseMove)
       renderer.domElement.removeEventListener('mouseup', onMouseUp)
       controls.dispose()
-      pmremGenerator.dispose()
-      roomGeo.dispose()
-      ;[wallColorTex, wallNormalTex, wallRoughTex, floorColorTex, floorNormalTex, floorRoughTex].forEach(t => t.dispose())
-      ;[wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5].forEach(m => m.dispose())
-      baseboards.forEach(bb => { bb.geometry.dispose(); scene.remove(bb) })
-      baseboardMat.dispose()
-      floorOverlayGeo.dispose()
-      floorOverlayMat.dispose()
-      ;[floorOverlayColorTex, floorOverlayNormalTex, floorOverlayRoughTex].forEach(t => t.dispose())
-      scene.remove(floorOverlay)
+      // Clean up modular room pieces
+      for (const obj of roomWallObjects) { scene.remove(obj); disposeObject(obj) }
+      for (const obj of roomFloorObjects) { scene.remove(obj); disposeObject(obj) }
+      roomWallObjectsRef.current = []
+      roomFloorObjectsRef.current = []
       for (const obj of furnitureMeshesRef.current.values()) {
         scene.remove(obj)
         disposeObject(obj)
