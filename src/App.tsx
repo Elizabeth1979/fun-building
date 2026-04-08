@@ -109,7 +109,7 @@ export default function App() {
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
   // Furniture state
-  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, removeItem, rotateItem } = useFurniture()
+  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem } = useFurniture()
 
   // Scene + mesh refs shared between effects and event handlers
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -117,6 +117,7 @@ export default function App() {
 
   // Stable function refs — updated every render so event-handler closures stay fresh
   const moveItemRef = useRef(moveItem)
+  const moveItemWithChildrenRef = useRef(moveItemWithChildrenFn)
   const setSelectedItemIdRef = useRef(setSelectedItemId)
   const placedItemsRef = useRef(placedItems)
   const rotateItemRef = useRef(rotateItem)
@@ -124,6 +125,7 @@ export default function App() {
   const selectedItemIdRef = useRef(selectedItemId)
 
   useEffect(() => { moveItemRef.current = moveItem }, [moveItem])
+  useEffect(() => { moveItemWithChildrenRef.current = moveItemWithChildrenFn }, [moveItemWithChildrenFn])
   useEffect(() => { setSelectedItemIdRef.current = setSelectedItemId }, [setSelectedItemId])
   useEffect(() => { placedItemsRef.current = placedItems }, [placedItems])
   useEffect(() => { rotateItemRef.current = rotateItem }, [rotateItem])
@@ -343,12 +345,15 @@ export default function App() {
       let restingOnId: string | null = null
 
       if (furnitureHits.length > 0) {
-        // Place on top of the hit furniture
-        const hit = furnitureHits[0]
-        const hitId = findFurnitureParent(hit.object, furnitureMeshesRef.current)
-        targetX = hit.point.x
-        targetY = hit.point.y + halfH
-        targetZ = hit.point.z
+        // Find the hit with the highest y (top surface), not just nearest to camera
+        let bestHit = furnitureHits[0]
+        for (const h of furnitureHits) {
+          if (h.point.y > bestHit.point.y) bestHit = h
+        }
+        const hitId = findFurnitureParent(bestHit.object, furnitureMeshesRef.current)
+        targetX = bestHit.point.x
+        targetY = bestHit.point.y + halfH
+        targetZ = bestHit.point.z
         restingOnId = hitId
       } else if (raycaster.ray.intersectPlane(floorPlane, dragTarget)) {
         // Fall back to floor plane
@@ -391,7 +396,7 @@ export default function App() {
       }
 
       currentRestingOnId = restingOnId
-      moveItemRef.current(dragItemId, { x: clamped.x, y: targetY, z: clamped.z })
+      moveItemRef.current(dragItemId, { x: clamped.x, y: targetY, z: clamped.z }, restingOnId)
     }
 
     function onMouseUp() {
@@ -516,7 +521,13 @@ export default function App() {
             }
           }
 
-          moveItemRef.current(selId, nudgedItem.position)
+          // If item has a parent, nudge only this item (relative on top of parent)
+          // If no parent, use moveItemWithChildren so children follow
+          if (item.parentId) {
+            moveItemRef.current(selId, nudgedItem.position, item.parentId)
+          } else {
+            moveItemWithChildrenRef.current(selId, nudgedItem.position)
+          }
         }
       }
     }
@@ -668,6 +679,26 @@ export default function App() {
         >
           ↻
         </button>
+      )}
+      {mode === 'build' && selectedItemId && placedItems.find(i => i.id === selectedItemId)?.parentId && (
+        <div style={{
+          position: 'absolute',
+          bottom: 24,
+          left: 'calc(50% + 32px)',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.92)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 16,
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }} title="Attached to parent">
+          🔗
+        </div>
       )}
       <ColorPickerPanel
         selectedSurface={selectedSurface}

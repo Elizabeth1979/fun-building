@@ -84,6 +84,36 @@ export function getPrevItemId(items: FurnitureItem[], currentId: string | null):
   return items[(idx - 1 + items.length) % items.length].id
 }
 
+export function getChildren(items: FurnitureItem[], parentId: string): FurnitureItem[] {
+  return items.filter(item => item.parentId === parentId)
+}
+
+export function moveItemWithChildren(
+  items: FurnitureItem[],
+  id: string,
+  newPos: { x: number; y: number; z: number },
+): FurnitureItem[] {
+  const parent = items.find(item => item.id === id)
+  if (!parent) return items
+  const dx = newPos.x - parent.position.x
+  const dy = newPos.y - parent.position.y
+  const dz = newPos.z - parent.position.z
+  return items.map(item => {
+    if (item.id === id) return { ...item, position: newPos }
+    if (item.parentId === id) {
+      return {
+        ...item,
+        position: {
+          x: item.position.x + dx,
+          y: item.position.y + dy,
+          z: item.position.z + dz,
+        },
+      }
+    }
+    return item
+  })
+}
+
 export function clampPosition(
   pos: { x: number; z: number },
   halfW: number,
@@ -108,12 +138,29 @@ export function useFurniture() {
     setSelectedItemId(instance.id)
   }
 
-  function moveItem(id: string, position: { x: number; y: number; z: number }): void {
-    setPlacedItems(prev => movePlacedItem(prev, id, position))
+  function moveItem(id: string, position: { x: number; y: number; z: number }, landedOnId?: string | null): void {
+    setPlacedItems(prev => {
+      let next = movePlacedItem(prev, id, position)
+      // Set or clear parentId based on whether item landed on furniture
+      if (landedOnId && position.y > 0.01) {
+        next = next.map(item => item.id === id ? { ...item, parentId: landedOnId } : item)
+      } else if (position.y <= 0.01) {
+        next = next.map(item => item.id === id ? { ...item, parentId: undefined } : item)
+      }
+      return next
+    })
+  }
+
+  function moveItemWithChildrenFn(id: string, newPos: { x: number; y: number; z: number }): void {
+    setPlacedItems(prev => moveItemWithChildren(prev, id, newPos))
   }
 
   function removeItem(id: string): void {
-    setPlacedItems(prev => removePlacedItem(prev, id))
+    setPlacedItems(prev => {
+      // Clear parentId on children before removing
+      const cleared = prev.map(item => item.parentId === id ? { ...item, parentId: undefined } : item)
+      return removePlacedItem(cleared, id)
+    })
     setSelectedItemId(prev => (prev === id ? null : prev))
   }
 
@@ -121,5 +168,5 @@ export function useFurniture() {
     setPlacedItems(prev => rotatePlacedItem(prev, id))
   }
 
-  return { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, removeItem, rotateItem }
+  return { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem }
 }

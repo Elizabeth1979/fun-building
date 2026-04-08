@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, nudgePlacedItem, clampPosition, getNextItemId, getPrevItemId } from './useFurniture'
+import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, nudgePlacedItem, clampPosition, getNextItemId, getPrevItemId, getChildren, moveItemWithChildren } from './useFurniture'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_CATALOG } from './furniture'
 
@@ -308,5 +308,80 @@ describe('getPrevItemId', () => {
 
   it('returns last item when currentId is not found', () => {
     expect(getPrevItemId(items, 'nonexistent')).toBe(items[2].id)
+  })
+})
+
+describe('getChildren', () => {
+  it('returns items whose parentId matches', () => {
+    const desk = createPlacedItem(SOFA)
+    const plant: FurnitureItem = { ...createPlacedItem(LAMP), parentId: desk.id }
+    const plant2: FurnitureItem = { ...createPlacedItem(LAMP), parentId: desk.id }
+    const loose = createPlacedItem(SOFA)
+    const items = [desk, plant, plant2, loose]
+    const children = getChildren(items, desk.id)
+    expect(children).toHaveLength(2)
+    expect(children[0].id).toBe(plant.id)
+    expect(children[1].id).toBe(plant2.id)
+  })
+
+  it('returns empty array when no children', () => {
+    const desk = createPlacedItem(SOFA)
+    const items = [desk]
+    expect(getChildren(items, desk.id)).toHaveLength(0)
+  })
+
+  it('returns empty array for nonexistent parentId', () => {
+    const items = [createPlacedItem(SOFA)]
+    expect(getChildren(items, 'nonexistent')).toHaveLength(0)
+  })
+})
+
+describe('moveItemWithChildren', () => {
+  it('moves the parent and offsets children by the same delta', () => {
+    const parent = { ...createPlacedItem(SOFA), position: { x: 1, y: 0, z: 1 } }
+    const child: FurnitureItem = { ...createPlacedItem(LAMP), position: { x: 1.2, y: 0.8, z: 1.1 }, parentId: parent.id }
+    const items = [parent, child]
+    const result = moveItemWithChildren(items, parent.id, { x: 3, y: 0, z: 3 })
+    // Parent moved to new position
+    expect(result[0].position).toEqual({ x: 3, y: 0, z: 3 })
+    // Child offset: dx=2, dy=0, dz=2
+    expect(result[1].position.x).toBeCloseTo(3.2)
+    expect(result[1].position.y).toBeCloseTo(0.8)
+    expect(result[1].position.z).toBeCloseTo(3.1)
+  })
+
+  it('does not move items that are not children', () => {
+    const parent = { ...createPlacedItem(SOFA), position: { x: 0, y: 0, z: 0 } }
+    const other = { ...createPlacedItem(LAMP), position: { x: 5, y: 0, z: 5 } }
+    const items = [parent, other]
+    const result = moveItemWithChildren(items, parent.id, { x: 2, y: 0, z: 2 })
+    expect(result[1].position).toEqual({ x: 5, y: 0, z: 5 })
+  })
+
+  it('returns original array if id not found', () => {
+    const items = [createPlacedItem(SOFA)]
+    const result = moveItemWithChildren(items, 'nonexistent', { x: 1, y: 0, z: 1 })
+    expect(result).toEqual(items)
+  })
+
+  it('does not mutate original items', () => {
+    const parent = { ...createPlacedItem(SOFA), position: { x: 0, y: 0, z: 0 } }
+    const child: FurnitureItem = { ...createPlacedItem(LAMP), position: { x: 0.5, y: 0.8, z: 0.5 }, parentId: parent.id }
+    const items = [parent, child]
+    const originalParentPos = { ...parent.position }
+    const originalChildPos = { ...child.position }
+    moveItemWithChildren(items, parent.id, { x: 5, y: 0, z: 5 })
+    expect(items[0].position).toEqual(originalParentPos)
+    expect(items[1].position).toEqual(originalChildPos)
+  })
+
+  it('moves multiple children correctly', () => {
+    const parent = { ...createPlacedItem(SOFA), position: { x: 0, y: 0, z: 0 } }
+    const child1: FurnitureItem = { ...createPlacedItem(LAMP), position: { x: 0.3, y: 0.8, z: 0.2 }, parentId: parent.id }
+    const child2: FurnitureItem = { ...createPlacedItem(LAMP), position: { x: -0.3, y: 0.8, z: -0.2 }, parentId: parent.id }
+    const items = [parent, child1, child2]
+    const result = moveItemWithChildren(items, parent.id, { x: 1, y: 0, z: 1 })
+    expect(result[1].position).toEqual({ x: 1.3, y: 0.8, z: 1.2 })
+    expect(result[2].position).toEqual({ x: 0.7, y: 0.8, z: 0.8 })
   })
 })

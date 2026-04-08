@@ -8,6 +8,7 @@ export interface FurnitureItem {
   color: string
   meshType: 'box' | 'cylinder' | 'sphere'
   modelPath?: string
+  parentId?: string
 }
 
 // Geometry dimensions per catalog id:
