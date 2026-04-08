@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
-import { useFurniture } from './useFurniture'
+import { useFurniture, clampPosition } from './useFurniture'
 import { saveScene, loadScene } from './persistence'
 import { useGodMode } from './useGodMode'
 import { useGameMode } from './useGameMode'
@@ -42,9 +42,9 @@ export default function App() {
   const mountRef = useRef<HTMLDivElement>(null)
 
   // Room color material refs
-  const wallMatsRef = useRef<THREE.MeshLambertMaterial[]>([])
-  const ceilingMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
-  const floorMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
+  const wallMatsRef = useRef<THREE.MeshBasicMaterial[]>([])
+  const ceilingMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
+  const floorMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
 
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
@@ -185,28 +185,22 @@ export default function App() {
 
     // Room
     const roomWidth = 10, roomHeight = 5, roomDepth = 10
-    const wallMat0 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat1 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const ceilingMat = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const bottomMat = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat4 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat5 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat0 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat1 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const bottomMat = new THREE.MeshBasicMaterial({ color: 0xc8a96e, side: THREE.BackSide })
+    const wallMat4 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat5 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
 
     wallMatsRef.current = [wallMat0, wallMat1, wallMat4, wallMat5]
     ceilingMatRef.current = ceilingMat
+
+    floorMatRef.current = bottomMat
 
     const roomGeo = new THREE.BoxGeometry(roomWidth, roomHeight, roomDepth)
     const room = new THREE.Mesh(roomGeo, [wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5])
     room.position.set(0, roomHeight / 2, 0)
     scene.add(room)
-
-    // Floor
-    const floorGeo = new THREE.PlaneGeometry(roomWidth, roomDepth)
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e })
-    floorMatRef.current = floorMat
-    const floor = new THREE.Mesh(floorGeo, floorMat)
-    floor.rotation.x = -Math.PI / 2
-    scene.add(floor)
 
     // Drag-and-drop raycasting state
     const raycaster = new THREE.Raycaster()
@@ -248,7 +242,13 @@ export default function App() {
       toNDC(e)
       raycaster.setFromCamera(mouse, camera)
       if (raycaster.ray.intersectPlane(floorPlane, dragTarget)) {
-        moveItemRef.current(dragItemId, { x: dragTarget.x, y: dragItemY, z: dragTarget.z })
+        const item = placedItemsRef.current.find(i => i.id === dragItemId)
+        const catalogId = item ? catalogIdOf(item) : null
+        const dims = catalogId ? (FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]) : [0.5, 0.5, 0.5]
+        const halfW = item?.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
+        const halfD = item?.meshType === 'box' ? (dims[2] as number) / 2 : halfW
+        const clamped = clampPosition({ x: dragTarget.x, z: dragTarget.z }, halfW, halfD, 5)
+        moveItemRef.current(dragItemId, { x: clamped.x, y: dragItemY, z: clamped.z })
       }
     }
 
@@ -292,8 +292,6 @@ export default function App() {
       controls.dispose()
       roomGeo.dispose()
       ;[wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5].forEach(m => m.dispose())
-      floorGeo.dispose()
-      floorMat.dispose()
       for (const mesh of furnitureMeshesRef.current.values()) {
         scene.remove(mesh)
         ;(mesh.material as THREE.MeshLambertMaterial).dispose()

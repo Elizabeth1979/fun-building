@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPlacedItem, movePlacedItem, removePlacedItem } from './useFurniture'
+import { createPlacedItem, movePlacedItem, removePlacedItem, clampPosition } from './useFurniture'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_CATALOG } from './furniture'
 
@@ -105,5 +105,44 @@ describe('removePlacedItem', () => {
     const single = [createPlacedItem(SOFA)]
     const result = removePlacedItem(single, single[0].id)
     expect(result).toHaveLength(0)
+  })
+})
+
+describe('clampPosition', () => {
+  it('leaves position unchanged when already inside bounds', () => {
+    const result = clampPosition({ x: 0, z: 0 }, 0.5, 0.5, 4)
+    expect(result).toEqual({ x: 0, z: 0 })
+  })
+
+  it('clamps x to the positive wall minus half-width', () => {
+    const result = clampPosition({ x: 10, z: 0 }, 1, 0.5, 4)
+    expect(result.x).toBe(3) // 4 - 1
+  })
+
+  it('clamps x to the negative wall plus half-width', () => {
+    const result = clampPosition({ x: -10, z: 0 }, 1, 0.5, 4)
+    expect(result.x).toBe(-3) // -(4 - 1)
+  })
+
+  it('clamps z to the positive wall minus half-depth', () => {
+    const result = clampPosition({ x: 0, z: 10 }, 0.5, 1.1, 4)
+    expect(result.z).toBeCloseTo(2.9) // 4 - 1.1
+  })
+
+  it('clamps z to the negative wall plus half-depth', () => {
+    const result = clampPosition({ x: 0, z: -10 }, 0.5, 1.1, 4)
+    expect(result.z).toBeCloseTo(-2.9)
+  })
+
+  it('clamps both x and z simultaneously', () => {
+    const result = clampPosition({ x: 99, z: -99 }, 0.5, 0.5, 4)
+    expect(result.x).toBe(3.5)
+    expect(result.z).toBe(-3.5)
+  })
+
+  it('does not move a position that is exactly at the boundary', () => {
+    const result = clampPosition({ x: 3, z: -3 }, 1, 1, 4)
+    expect(result.x).toBe(3)
+    expect(result.z).toBe(-3)
   })
 })

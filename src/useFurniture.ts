@@ -24,6 +24,20 @@ export function removePlacedItem(items: FurnitureItem[], id: string): FurnitureI
   return items.filter(item => item.id !== id)
 }
 
+export function clampPosition(
+  pos: { x: number; z: number },
+  halfW: number,
+  halfD: number,
+  roomHalf: number,
+): { x: number; z: number } {
+  const maxX = roomHalf - halfW
+  const maxZ = roomHalf - halfD
+  return {
+    x: Math.max(-maxX, Math.min(maxX, pos.x)),
+    z: Math.max(-maxZ, Math.min(maxZ, pos.z)),
+  }
+}
+
 export function useFurniture() {
   const [placedItems, setPlacedItems] = useState<FurnitureItem[]>([])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
