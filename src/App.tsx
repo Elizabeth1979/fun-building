@@ -4,8 +4,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { useRoomColors } from './useRoomColors'
 import { saveScene, loadScene } from './persistence'
+import { useGodMode } from './useGodMode'
 
 export default function App() {
+  const isGodMode = useGodMode()
   const mountRef = useRef<HTMLDivElement>(null)
 
   // Refs to Three.js materials — updated whenever React color state changes
@@ -156,6 +158,25 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+      {isGodMode && (
+        <div style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          background: '#ffd700',
+          color: '#000',
+          fontWeight: 'bold',
+          fontSize: 13,
+          padding: '4px 10px',
+          borderRadius: 6,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          letterSpacing: 1,
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}>
+          ⚡ GOD MODE
+        </div>
+      )}
       <ColorPickerPanel
         selectedSurface={selectedSurface}
         onSurfaceChange={setSelectedSurface}
