@@ -317,6 +317,28 @@ export default function App() {
         const halfW = item?.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
         const halfD = item?.meshType === 'box' ? (dims[2] as number) / 2 : halfW
         const clamped = clampPosition({ x: dragTarget.x, z: dragTarget.z }, halfW, halfD, 5)
+
+        // Box3 collision check: reject move if it would overlap another item
+        const draggedObj = furnitureMeshesRef.current.get(dragItemId)
+        if (draggedObj) {
+          const prevPos = draggedObj.position.clone()
+          draggedObj.position.set(clamped.x, dragItemY, clamped.z)
+          const draggedBox = new THREE.Box3().setFromObject(draggedObj)
+          let blocked = false
+          for (const [id, obj] of furnitureMeshesRef.current) {
+            if (id === dragItemId) continue
+            const otherBox = new THREE.Box3().setFromObject(obj)
+            if (draggedBox.intersectsBox(otherBox)) {
+              blocked = true
+              break
+            }
+          }
+          if (blocked) {
+            draggedObj.position.copy(prevPos)
+            return
+          }
+        }
+
         moveItemRef.current(dragItemId, { x: clamped.x, y: dragItemY, z: clamped.z })
       }
     }
