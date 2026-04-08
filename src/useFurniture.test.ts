@@ -127,9 +127,9 @@ describe('rotatePlacedItem', () => {
     createPlacedItem(LAMP),
   ]
 
-  it('increments rotation by Math.PI/4 (45 degrees)', () => {
+  it('increments rotation by Math.PI/2 (90 degrees)', () => {
     const result = rotatePlacedItem(items, items[0].id)
-    expect(result[0].rotation).toBeCloseTo(Math.PI / 4)
+    expect(result[0].rotation).toBeCloseTo(Math.PI / 2)
   })
 
   it('returns a new array (does not mutate)', () => {
