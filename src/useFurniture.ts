@@ -43,7 +43,7 @@ export function removePlacedItem(items: FurnitureItem[], id: string): FurnitureI
 
 export function rotatePlacedItem(items: FurnitureItem[], id: string): FurnitureItem[] {
   return items.map(item =>
-    item.id === id ? { ...item, rotation: item.rotation + Math.PI / 2 } : item,
+    item.id === id ? { ...item, rotation: item.rotation + Math.PI / 4 } : item,
   )
 }
 
