@@ -11,9 +11,9 @@ export interface RoomColors {
 export const SURFACES: Surface[] = ['walls', 'floor', 'ceiling']
 
 export const DEFAULT_COLORS: RoomColors = {
-  walls: '#ffe9c8',
+  walls: '#f5f0e8',
   floor: '#c8a96e',
-  ceiling: '#ffe9c8',
+  ceiling: '#faf8f5',
 }
 
 export function applyColor(colors: RoomColors, surface: Surface, color: string): RoomColors {

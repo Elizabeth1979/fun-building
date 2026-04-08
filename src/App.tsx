@@ -115,6 +115,7 @@ export default function App() {
   const wallMatsRef = useRef<THREE.MeshStandardMaterial[]>([])
   const ceilingMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
   const floorMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const floorOverlayMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
 
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
@@ -187,6 +188,7 @@ export default function App() {
   }, [colors.ceiling])
   useEffect(() => {
     floorMatRef.current?.color.set(colors.floor)
+    floorOverlayMatRef.current?.color.set(colors.floor)
   }, [colors.floor])
 
   // Sync placedItems → Three.js meshes (add / remove / reposition)
@@ -305,12 +307,12 @@ export default function App() {
     const floorNormalTex = loadFloorTexture('floor_normal.jpg')
     const floorRoughTex = loadFloorTexture('floor_roughness.jpg')
 
-    const wallMat0 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const wallMat1 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat0 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const wallMat1 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xfaf8f5, side: THREE.BackSide })
     const bottomMat = new THREE.MeshStandardMaterial({ color: 0xc8a96e, side: THREE.BackSide, map: floorColorTex, normalMap: floorNormalTex, roughnessMap: floorRoughTex })
-    const wallMat4 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
-    const wallMat5 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const wallMat4 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const wallMat5 = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
 
     wallMatsRef.current = [wallMat0, wallMat1, wallMat4, wallMat5]
     ceilingMatRef.current = ceilingMat
@@ -322,6 +324,60 @@ export default function App() {
     room.castShadow = false
     room.receiveShadow = true
     scene.add(room)
+
+    // Baseboards — thin strips along each wall at floor level
+    const baseboardColor = 0x4a3728
+    const baseboardMat = new THREE.MeshStandardMaterial({ color: baseboardColor })
+    const baseboardH = 0.08
+    const baseboardD = 0.04
+    const baseboards: THREE.Mesh[] = []
+
+    // Front wall (z = roomDepth/2)
+    const bbFront = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, baseboardH, baseboardD), baseboardMat)
+    bbFront.position.set(0, baseboardH / 2, roomDepth / 2 - baseboardD / 2)
+    bbFront.castShadow = true
+    scene.add(bbFront)
+    baseboards.push(bbFront)
+
+    // Back wall (z = -roomDepth/2)
+    const bbBack = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, baseboardH, baseboardD), baseboardMat)
+    bbBack.position.set(0, baseboardH / 2, -(roomDepth / 2 - baseboardD / 2))
+    bbBack.castShadow = true
+    scene.add(bbBack)
+    baseboards.push(bbBack)
+
+    // Left wall (x = -roomWidth/2)
+    const bbLeft = new THREE.Mesh(new THREE.BoxGeometry(baseboardD, baseboardH, roomDepth), baseboardMat)
+    bbLeft.position.set(-(roomWidth / 2 - baseboardD / 2), baseboardH / 2, 0)
+    bbLeft.castShadow = true
+    scene.add(bbLeft)
+    baseboards.push(bbLeft)
+
+    // Right wall (x = roomWidth/2)
+    const bbRight = new THREE.Mesh(new THREE.BoxGeometry(baseboardD, baseboardH, roomDepth), baseboardMat)
+    bbRight.position.set(roomWidth / 2 - baseboardD / 2, baseboardH / 2, 0)
+    bbRight.castShadow = true
+    scene.add(bbRight)
+    baseboards.push(bbRight)
+
+    // Floor overlay plane — covers box-geometry edge seam
+    const floorOverlaySize = 9.8
+    const floorOverlayGeo = new THREE.PlaneGeometry(floorOverlaySize, floorOverlaySize)
+    const floorOverlayColorTex = loadFloorTexture('floor_color.jpg')
+    const floorOverlayNormalTex = loadFloorTexture('floor_normal.jpg')
+    const floorOverlayRoughTex = loadFloorTexture('floor_roughness.jpg')
+    const floorOverlayMat = new THREE.MeshStandardMaterial({
+      color: 0xc8a96e,
+      map: floorOverlayColorTex,
+      normalMap: floorOverlayNormalTex,
+      roughnessMap: floorOverlayRoughTex,
+    })
+    const floorOverlay = new THREE.Mesh(floorOverlayGeo, floorOverlayMat)
+    floorOverlay.rotation.x = -Math.PI / 2
+    floorOverlay.position.y = 0.001
+    floorOverlay.receiveShadow = true
+    scene.add(floorOverlay)
+    floorOverlayMatRef.current = floorOverlayMat
 
     // Drag-and-drop raycasting state
     const raycaster = new THREE.Raycaster()
@@ -619,6 +675,12 @@ export default function App() {
       roomGeo.dispose()
       ;[wallColorTex, wallNormalTex, wallRoughTex, floorColorTex, floorNormalTex, floorRoughTex].forEach(t => t.dispose())
       ;[wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5].forEach(m => m.dispose())
+      baseboards.forEach(bb => { bb.geometry.dispose(); scene.remove(bb) })
+      baseboardMat.dispose()
+      floorOverlayGeo.dispose()
+      floorOverlayMat.dispose()
+      ;[floorOverlayColorTex, floorOverlayNormalTex, floorOverlayRoughTex].forEach(t => t.dispose())
+      scene.remove(floorOverlay)
       for (const obj of furnitureMeshesRef.current.values()) {
         scene.remove(obj)
         disposeObject(obj)

@@ -2,16 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { applyColor, DEFAULT_COLORS, SURFACES } from './useRoomColors'
 
 describe('DEFAULT_COLORS', () => {
-  it('has a warm-white wall color', () => {
-    expect(DEFAULT_COLORS.walls).toBe('#ffe9c8')
+  it('has a warm off-white wall color', () => {
+    expect(DEFAULT_COLORS.walls).toBe('#f5f0e8')
   })
 
   it('has a wood floor color', () => {
     expect(DEFAULT_COLORS.floor).toBe('#c8a96e')
   })
 
-  it('has a ceiling color matching walls by default', () => {
-    expect(DEFAULT_COLORS.ceiling).toBe('#ffe9c8')
+  it('has a light warm-white ceiling color', () => {
+    expect(DEFAULT_COLORS.ceiling).toBe('#faf8f5')
   })
 })
 
