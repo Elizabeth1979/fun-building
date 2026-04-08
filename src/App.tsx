@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
-import { useFurniture, clampPosition, nudgePlacedItem } from './useFurniture'
+import { useFurniture, clampPosition, nudgePlacedItem, getNextItemId, getPrevItemId } from './useFurniture'
 import { saveScene, loadScene } from './persistence'
 import { useGodMode } from './useGodMode'
 import { useGameMode } from './useGameMode'
@@ -398,6 +398,18 @@ export default function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
+      // Tab / Shift+Tab: cycle through placed furniture items
+      if (e.key === 'Tab' && !isPlayModeRef.current) {
+        e.preventDefault()
+        const items = placedItemsRef.current
+        const current = selectedItemIdRef.current
+        const nextId = e.shiftKey
+          ? getPrevItemId(items, current)
+          : getNextItemId(items, current)
+        setSelectedItemIdRef.current(nextId)
+        return
+      }
+
       const selId = selectedItemIdRef.current
       if (selId && !isPlayModeRef.current) {
         if (e.key === 'r' || e.key === 'R') {
@@ -645,7 +657,7 @@ export default function App() {
         whiteSpace: 'nowrap',
         letterSpacing: 0.3,
       }}>
-        Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move &nbsp;&bull;&nbsp; &larr; &rarr; &uarr; &darr; nudge
+        Tab cycle items &nbsp;&bull;&nbsp; Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move &nbsp;&bull;&nbsp; &larr; &rarr; &uarr; &darr; nudge
       </div>
     </div>
   )

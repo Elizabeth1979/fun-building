@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, nudgePlacedItem, clampPosition } from './useFurniture'
+import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, nudgePlacedItem, clampPosition, getNextItemId, getPrevItemId } from './useFurniture'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_CATALOG } from './furniture'
 
@@ -242,5 +242,71 @@ describe('clampPosition', () => {
     const result = clampPosition({ x: 3, z: -3 }, 1, 1, 4)
     expect(result.x).toBe(3)
     expect(result.z).toBe(-3)
+  })
+})
+
+describe('getNextItemId', () => {
+  const items: FurnitureItem[] = [
+    createPlacedItem(SOFA),
+    createPlacedItem(LAMP),
+    createPlacedItem(SOFA),
+  ]
+
+  it('returns first item id when nothing is selected', () => {
+    expect(getNextItemId(items, null)).toBe(items[0].id)
+  })
+
+  it('returns null when items list is empty', () => {
+    expect(getNextItemId([], null)).toBeNull()
+  })
+
+  it('returns null when items list is empty even with a stale id', () => {
+    expect(getNextItemId([], 'stale-id')).toBeNull()
+  })
+
+  it('advances to the next item', () => {
+    expect(getNextItemId(items, items[0].id)).toBe(items[1].id)
+    expect(getNextItemId(items, items[1].id)).toBe(items[2].id)
+  })
+
+  it('wraps around from last to first', () => {
+    expect(getNextItemId(items, items[2].id)).toBe(items[0].id)
+  })
+
+  it('returns first item when currentId is not found', () => {
+    expect(getNextItemId(items, 'nonexistent')).toBe(items[0].id)
+  })
+})
+
+describe('getPrevItemId', () => {
+  const items: FurnitureItem[] = [
+    createPlacedItem(SOFA),
+    createPlacedItem(LAMP),
+    createPlacedItem(SOFA),
+  ]
+
+  it('returns last item id when nothing is selected', () => {
+    expect(getPrevItemId(items, null)).toBe(items[2].id)
+  })
+
+  it('returns null when items list is empty', () => {
+    expect(getPrevItemId([], null)).toBeNull()
+  })
+
+  it('returns null when items list is empty even with a stale id', () => {
+    expect(getPrevItemId([], 'stale-id')).toBeNull()
+  })
+
+  it('goes to the previous item', () => {
+    expect(getPrevItemId(items, items[2].id)).toBe(items[1].id)
+    expect(getPrevItemId(items, items[1].id)).toBe(items[0].id)
+  })
+
+  it('wraps around from first to last', () => {
+    expect(getPrevItemId(items, items[0].id)).toBe(items[2].id)
+  })
+
+  it('returns last item when currentId is not found', () => {
+    expect(getPrevItemId(items, 'nonexistent')).toBe(items[2].id)
   })
 })

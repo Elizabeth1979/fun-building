@@ -68,6 +68,22 @@ export function nudgePlacedItem(
   })
 }
 
+export function getNextItemId(items: FurnitureItem[], currentId: string | null): string | null {
+  if (items.length === 0) return null
+  if (currentId === null) return items[0].id
+  const idx = items.findIndex(i => i.id === currentId)
+  if (idx === -1) return items[0].id
+  return items[(idx + 1) % items.length].id
+}
+
+export function getPrevItemId(items: FurnitureItem[], currentId: string | null): string | null {
+  if (items.length === 0) return null
+  if (currentId === null) return items[items.length - 1].id
+  const idx = items.findIndex(i => i.id === currentId)
+  if (idx === -1) return items[items.length - 1].id
+  return items[(idx - 1 + items.length) % items.length].id
+}
+
 export function clampPosition(
   pos: { x: number; z: number },
   halfW: number,
