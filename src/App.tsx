@@ -42,9 +42,9 @@ export default function App() {
   const mountRef = useRef<HTMLDivElement>(null)
 
   // Room color material refs
-  const wallMatsRef = useRef<THREE.MeshBasicMaterial[]>([])
-  const ceilingMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
-  const floorMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
+  const wallMatsRef = useRef<THREE.MeshLambertMaterial[]>([])
+  const ceilingMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
+  const floorMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
 
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
@@ -185,12 +185,12 @@ export default function App() {
 
     // Room
     const roomWidth = 10, roomHeight = 5, roomDepth = 10
-    const wallMat0 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat1 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const bottomMat = new THREE.MeshBasicMaterial({ color: 0xc8a96e, side: THREE.BackSide })
-    const wallMat4 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat5 = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat0 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat1 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const ceilingMat = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const bottomMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e, side: THREE.BackSide })
+    const wallMat4 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const wallMat5 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
 
     wallMatsRef.current = [wallMat0, wallMat1, wallMat4, wallMat5]
     ceilingMatRef.current = ceilingMat
