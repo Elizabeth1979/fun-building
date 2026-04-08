@@ -2,6 +2,7 @@ export interface FurnitureItem {
   id: string
   name: string
   category?: string
+  emoji?: string
   position: { x: number; y: number; z: number }
   rotation: number // y-axis rotation in radians
   color: string
@@ -69,51 +70,51 @@ const p0 = { x: 0, y: 0, z: 0 }
 // Catalog items — templates for placing furniture in the room.
 export const FURNITURE_CATALOG: FurnitureItem[] = [
   // Living Room
-  { id: 'loungeSofa',        name: 'Sofa',              category: 'Living Room', position: p0, rotation: 0, color: '#8b4513', meshType: 'box',      modelPath: '/models/loungeSofa.glb' },
-  { id: 'loungeSofaLong',    name: 'Long Sofa',         category: 'Living Room', position: p0, rotation: 0, color: '#6b3410', meshType: 'box',      modelPath: '/models/loungeSofaLong.glb' },
-  { id: 'loungeChair',       name: 'Lounge Chair',      category: 'Living Room', position: p0, rotation: 0, color: '#a0522d', meshType: 'box',      modelPath: '/models/loungeChair.glb' },
-  { id: 'loungeDesignSofa',  name: 'Design Sofa',       category: 'Living Room', position: p0, rotation: 0, color: '#c19a6b', meshType: 'box',      modelPath: '/models/loungeDesignSofa.glb' },
-  { id: 'tableCoffee',       name: 'Coffee Table',      category: 'Living Room', position: p0, rotation: 0, color: '#d2b48c', meshType: 'box',      modelPath: '/models/tableCoffee.glb' },
-  { id: 'tableRound',        name: 'Round Table',       category: 'Living Room', position: p0, rotation: 0, color: '#c8a96e', meshType: 'box',      modelPath: '/models/tableRound.glb' },
-  { id: 'table',             name: 'Table',             category: 'Living Room', position: p0, rotation: 0, color: '#d2b48c', meshType: 'box',      modelPath: '/models/table.glb' },
-  { id: 'sideTable',         name: 'Side Table',        category: 'Living Room', position: p0, rotation: 0, color: '#b8860b', meshType: 'box',      modelPath: '/models/sideTable.glb' },
-  { id: 'lampSquareFloor',   name: 'Square Lamp',       category: 'Living Room', position: p0, rotation: 0, color: '#ffd700', meshType: 'cylinder', modelPath: '/models/lampSquareFloor.glb' },
-  { id: 'lampRoundFloor',    name: 'Round Lamp',        category: 'Living Room', position: p0, rotation: 0, color: '#ffd700', meshType: 'cylinder', modelPath: '/models/lampRoundFloor.glb' },
-  { id: 'rugRectangle',      name: 'Rectangle Rug',     category: 'Living Room', position: p0, rotation: 0, color: '#b22222', meshType: 'box',      modelPath: '/models/rugRectangle.glb' },
-  { id: 'rugRound',          name: 'Round Rug',         category: 'Living Room', position: p0, rotation: 0, color: '#cd853f', meshType: 'cylinder', modelPath: '/models/rugRound.glb' },
-  { id: 'televisionModern',  name: 'Television',        category: 'Living Room', position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/televisionModern.glb' },
-  { id: 'cabinetTelevision', name: 'TV Cabinet',        category: 'Living Room', position: p0, rotation: 0, color: '#5c4033', meshType: 'box',      modelPath: '/models/cabinetTelevision.glb' },
+  { id: 'loungeSofa',        name: 'Sofa',              category: 'Living Room', emoji: '🛋️', position: p0, rotation: 0, color: '#8b4513', meshType: 'box',      modelPath: '/models/loungeSofa.glb' },
+  { id: 'loungeSofaLong',    name: 'Long Sofa',         category: 'Living Room', emoji: '🛋️', position: p0, rotation: 0, color: '#6b3410', meshType: 'box',      modelPath: '/models/loungeSofaLong.glb' },
+  { id: 'loungeChair',       name: 'Lounge Chair',      category: 'Living Room', emoji: '💺', position: p0, rotation: 0, color: '#a0522d', meshType: 'box',      modelPath: '/models/loungeChair.glb' },
+  { id: 'loungeDesignSofa',  name: 'Design Sofa',       category: 'Living Room', emoji: '🛋️', position: p0, rotation: 0, color: '#c19a6b', meshType: 'box',      modelPath: '/models/loungeDesignSofa.glb' },
+  { id: 'tableCoffee',       name: 'Coffee Table',      category: 'Living Room', emoji: '☕', position: p0, rotation: 0, color: '#d2b48c', meshType: 'box',      modelPath: '/models/tableCoffee.glb' },
+  { id: 'tableRound',        name: 'Round Table',       category: 'Living Room', emoji: '🪵', position: p0, rotation: 0, color: '#c8a96e', meshType: 'box',      modelPath: '/models/tableRound.glb' },
+  { id: 'table',             name: 'Table',             category: 'Living Room', emoji: '🪵', position: p0, rotation: 0, color: '#d2b48c', meshType: 'box',      modelPath: '/models/table.glb' },
+  { id: 'sideTable',         name: 'Side Table',        category: 'Living Room', emoji: '🪵', position: p0, rotation: 0, color: '#b8860b', meshType: 'box',      modelPath: '/models/sideTable.glb' },
+  { id: 'lampSquareFloor',   name: 'Square Lamp',       category: 'Living Room', emoji: '💡', position: p0, rotation: 0, color: '#ffd700', meshType: 'cylinder', modelPath: '/models/lampSquareFloor.glb' },
+  { id: 'lampRoundFloor',    name: 'Round Lamp',        category: 'Living Room', emoji: '💡', position: p0, rotation: 0, color: '#ffd700', meshType: 'cylinder', modelPath: '/models/lampRoundFloor.glb' },
+  { id: 'rugRectangle',      name: 'Rectangle Rug',     category: 'Living Room', emoji: '🟫', position: p0, rotation: 0, color: '#b22222', meshType: 'box',      modelPath: '/models/rugRectangle.glb' },
+  { id: 'rugRound',          name: 'Round Rug',         category: 'Living Room', emoji: '⭕', position: p0, rotation: 0, color: '#cd853f', meshType: 'cylinder', modelPath: '/models/rugRound.glb' },
+  { id: 'televisionModern',  name: 'Television',        category: 'Living Room', emoji: '📺', position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/televisionModern.glb' },
+  { id: 'cabinetTelevision', name: 'TV Cabinet',        category: 'Living Room', emoji: '📦', position: p0, rotation: 0, color: '#5c4033', meshType: 'box',      modelPath: '/models/cabinetTelevision.glb' },
   // Bedroom
-  { id: 'bedDouble',         name: 'Double Bed',        category: 'Bedroom',     position: p0, rotation: 0, color: '#000080', meshType: 'box',      modelPath: '/models/bedDouble.glb' },
-  { id: 'bedSingle',         name: 'Single Bed',        category: 'Bedroom',     position: p0, rotation: 0, color: '#4169e1', meshType: 'box',      modelPath: '/models/bedSingle.glb' },
-  { id: 'bedBunk',           name: 'Bunk Bed',          category: 'Bedroom',     position: p0, rotation: 0, color: '#8b7355', meshType: 'box',      modelPath: '/models/bedBunk.glb' },
-  { id: 'bookcaseOpen',      name: 'Bookcase',          category: 'Bedroom',     position: p0, rotation: 0, color: '#3b1a08', meshType: 'box',      modelPath: '/models/bookcaseOpen.glb' },
-  { id: 'cabinetBedDrawer',  name: 'Nightstand',        category: 'Bedroom',     position: p0, rotation: 0, color: '#5c4033', meshType: 'box',      modelPath: '/models/cabinetBedDrawer.glb' },
-  { id: 'pillow',            name: 'Pillow',            category: 'Bedroom',     position: p0, rotation: 0, color: '#f5f5dc', meshType: 'box',      modelPath: '/models/pillow.glb' },
+  { id: 'bedDouble',         name: 'Double Bed',        category: 'Bedroom',     emoji: '🛏️', position: p0, rotation: 0, color: '#000080', meshType: 'box',      modelPath: '/models/bedDouble.glb' },
+  { id: 'bedSingle',         name: 'Single Bed',        category: 'Bedroom',     emoji: '🛏️', position: p0, rotation: 0, color: '#4169e1', meshType: 'box',      modelPath: '/models/bedSingle.glb' },
+  { id: 'bedBunk',           name: 'Bunk Bed',          category: 'Bedroom',     emoji: '🛏️', position: p0, rotation: 0, color: '#8b7355', meshType: 'box',      modelPath: '/models/bedBunk.glb' },
+  { id: 'bookcaseOpen',      name: 'Bookcase',          category: 'Bedroom',     emoji: '📚', position: p0, rotation: 0, color: '#3b1a08', meshType: 'box',      modelPath: '/models/bookcaseOpen.glb' },
+  { id: 'cabinetBedDrawer',  name: 'Nightstand',        category: 'Bedroom',     emoji: '🗄️', position: p0, rotation: 0, color: '#5c4033', meshType: 'box',      modelPath: '/models/cabinetBedDrawer.glb' },
+  { id: 'pillow',            name: 'Pillow',            category: 'Bedroom',     emoji: '😴', position: p0, rotation: 0, color: '#f5f5dc', meshType: 'box',      modelPath: '/models/pillow.glb' },
   // Kitchen
-  { id: 'kitchenFridge',     name: 'Fridge',            category: 'Kitchen',     position: p0, rotation: 0, color: '#c0c0c0', meshType: 'box',      modelPath: '/models/kitchenFridge.glb' },
-  { id: 'kitchenStove',      name: 'Stove',             category: 'Kitchen',     position: p0, rotation: 0, color: '#808080', meshType: 'box',      modelPath: '/models/kitchenStove.glb' },
-  { id: 'kitchenSink',       name: 'Kitchen Sink',      category: 'Kitchen',     position: p0, rotation: 0, color: '#a9a9a9', meshType: 'box',      modelPath: '/models/kitchenSink.glb' },
-  { id: 'kitchenCabinet',    name: 'Cabinet',           category: 'Kitchen',     position: p0, rotation: 0, color: '#deb887', meshType: 'box',      modelPath: '/models/kitchenCabinet.glb' },
-  { id: 'kitchenCoffeeMachine', name: 'Coffee Machine', category: 'Kitchen',     position: p0, rotation: 0, color: '#2f2f2f', meshType: 'box',      modelPath: '/models/kitchenCoffeeMachine.glb' },
-  { id: 'kitchenMicrowave',  name: 'Microwave',         category: 'Kitchen',     position: p0, rotation: 0, color: '#696969', meshType: 'box',      modelPath: '/models/kitchenMicrowave.glb' },
+  { id: 'kitchenFridge',     name: 'Fridge',            category: 'Kitchen',     emoji: '❄️', position: p0, rotation: 0, color: '#c0c0c0', meshType: 'box',      modelPath: '/models/kitchenFridge.glb' },
+  { id: 'kitchenStove',      name: 'Stove',             category: 'Kitchen',     emoji: '🔥', position: p0, rotation: 0, color: '#808080', meshType: 'box',      modelPath: '/models/kitchenStove.glb' },
+  { id: 'kitchenSink',       name: 'Kitchen Sink',      category: 'Kitchen',     emoji: '🚰', position: p0, rotation: 0, color: '#a9a9a9', meshType: 'box',      modelPath: '/models/kitchenSink.glb' },
+  { id: 'kitchenCabinet',    name: 'Cabinet',           category: 'Kitchen',     emoji: '📦', position: p0, rotation: 0, color: '#deb887', meshType: 'box',      modelPath: '/models/kitchenCabinet.glb' },
+  { id: 'kitchenCoffeeMachine', name: 'Coffee Machine', category: 'Kitchen',     emoji: '☕', position: p0, rotation: 0, color: '#2f2f2f', meshType: 'box',      modelPath: '/models/kitchenCoffeeMachine.glb' },
+  { id: 'kitchenMicrowave',  name: 'Microwave',         category: 'Kitchen',     emoji: '📡', position: p0, rotation: 0, color: '#696969', meshType: 'box',      modelPath: '/models/kitchenMicrowave.glb' },
   // Bathroom
-  { id: 'bathtub',           name: 'Bathtub',           category: 'Bathroom',    position: p0, rotation: 0, color: '#f0f0f0', meshType: 'box',      modelPath: '/models/bathtub.glb' },
-  { id: 'toilet',            name: 'Toilet',            category: 'Bathroom',    position: p0, rotation: 0, color: '#fafafa', meshType: 'box',      modelPath: '/models/toilet.glb' },
-  { id: 'bathroomSink',      name: 'Bathroom Sink',     category: 'Bathroom',    position: p0, rotation: 0, color: '#e8e8e8', meshType: 'box',      modelPath: '/models/bathroomSink.glb' },
-  { id: 'shower',            name: 'Shower',            category: 'Bathroom',    position: p0, rotation: 0, color: '#b0c4de', meshType: 'box',      modelPath: '/models/shower.glb' },
+  { id: 'bathtub',           name: 'Bathtub',           category: 'Bathroom',    emoji: '🛁', position: p0, rotation: 0, color: '#f0f0f0', meshType: 'box',      modelPath: '/models/bathtub.glb' },
+  { id: 'toilet',            name: 'Toilet',            category: 'Bathroom',    emoji: '🚽', position: p0, rotation: 0, color: '#fafafa', meshType: 'box',      modelPath: '/models/toilet.glb' },
+  { id: 'bathroomSink',      name: 'Bathroom Sink',     category: 'Bathroom',    emoji: '🚰', position: p0, rotation: 0, color: '#e8e8e8', meshType: 'box',      modelPath: '/models/bathroomSink.glb' },
+  { id: 'shower',            name: 'Shower',            category: 'Bathroom',    emoji: '🚿', position: p0, rotation: 0, color: '#b0c4de', meshType: 'box',      modelPath: '/models/shower.glb' },
   // Office
-  { id: 'desk',              name: 'Desk',              category: 'Office',      position: p0, rotation: 0, color: '#8b7355', meshType: 'box',      modelPath: '/models/desk.glb' },
-  { id: 'chairDesk',         name: 'Desk Chair',        category: 'Office',      position: p0, rotation: 0, color: '#333333', meshType: 'box',      modelPath: '/models/chairDesk.glb' },
-  { id: 'chairCushion',      name: 'Cushion Chair',     category: 'Office',      position: p0, rotation: 0, color: '#808080', meshType: 'box',      modelPath: '/models/chairCushion.glb' },
-  { id: 'computerScreen',    name: 'Monitor',           category: 'Office',      position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/computerScreen.glb' },
-  { id: 'laptop',            name: 'Laptop',            category: 'Office',      position: p0, rotation: 0, color: '#2f2f2f', meshType: 'box',      modelPath: '/models/laptop.glb' },
+  { id: 'desk',              name: 'Desk',              category: 'Office',      emoji: '🖥️', position: p0, rotation: 0, color: '#8b7355', meshType: 'box',      modelPath: '/models/desk.glb' },
+  { id: 'chairDesk',         name: 'Desk Chair',        category: 'Office',      emoji: '🪑', position: p0, rotation: 0, color: '#333333', meshType: 'box',      modelPath: '/models/chairDesk.glb' },
+  { id: 'chairCushion',      name: 'Cushion Chair',     category: 'Office',      emoji: '🪑', position: p0, rotation: 0, color: '#808080', meshType: 'box',      modelPath: '/models/chairCushion.glb' },
+  { id: 'computerScreen',    name: 'Monitor',           category: 'Office',      emoji: '🖥️', position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/computerScreen.glb' },
+  { id: 'laptop',            name: 'Laptop',            category: 'Office',      emoji: '💻', position: p0, rotation: 0, color: '#2f2f2f', meshType: 'box',      modelPath: '/models/laptop.glb' },
   // Decor
-  { id: 'plantSmall1',       name: 'Small Plant',       category: 'Decor',       position: p0, rotation: 0, color: '#228b22', meshType: 'box',      modelPath: '/models/plantSmall1.glb' },
-  { id: 'pottedPlant',       name: 'Potted Plant',      category: 'Decor',       position: p0, rotation: 0, color: '#2e8b57', meshType: 'box',      modelPath: '/models/pottedPlant.glb' },
-  { id: 'speaker',           name: 'Speaker',           category: 'Decor',       position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/speaker.glb' },
-  { id: 'trashcan',          name: 'Trash Can',         category: 'Decor',       position: p0, rotation: 0, color: '#696969', meshType: 'cylinder', modelPath: '/models/trashcan.glb' },
-  { id: 'stairs',            name: 'Stairs',            category: 'Decor',       position: p0, rotation: 0, color: '#a0522d', meshType: 'box',      modelPath: '/models/stairs.glb' },
+  { id: 'plantSmall1',       name: 'Small Plant',       category: 'Decor',       emoji: '🌱', position: p0, rotation: 0, color: '#228b22', meshType: 'box',      modelPath: '/models/plantSmall1.glb' },
+  { id: 'pottedPlant',       name: 'Potted Plant',      category: 'Decor',       emoji: '🪴', position: p0, rotation: 0, color: '#2e8b57', meshType: 'box',      modelPath: '/models/pottedPlant.glb' },
+  { id: 'speaker',           name: 'Speaker',           category: 'Decor',       emoji: '🔊', position: p0, rotation: 0, color: '#1a1a1a', meshType: 'box',      modelPath: '/models/speaker.glb' },
+  { id: 'trashcan',          name: 'Trash Can',         category: 'Decor',       emoji: '🗑️', position: p0, rotation: 0, color: '#696969', meshType: 'cylinder', modelPath: '/models/trashcan.glb' },
+  { id: 'stairs',            name: 'Stairs',            category: 'Decor',       emoji: '🪜', position: p0, rotation: 0, color: '#a0522d', meshType: 'box',      modelPath: '/models/stairs.glb' },
 ]
 
 // Ordered list of categories for UI display

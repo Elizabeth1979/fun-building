@@ -281,6 +281,7 @@ export default function App() {
     let isDragging = false
     let dragItemId: string | null = null
     let dragItemY = 0
+    let currentRestingOnId: string | null = null
 
     function toNDC(e: MouseEvent) {
       const rect = renderer.domElement.getBoundingClientRect()
@@ -386,6 +387,7 @@ export default function App() {
         }
       }
 
+      currentRestingOnId = restingOnId
       moveItemRef.current(dragItemId, { x: clamped.x, y: targetY, z: clamped.z })
     }
 
@@ -428,6 +430,7 @@ export default function App() {
           if (!nudgedItem) return
 
           // Box3 collision check (same pattern as drag)
+          // Skip the item we're resting on (intentionally touching)
           const obj = furnitureMeshesRef.current.get(selId)
           if (obj) {
             const prevPos = obj.position.clone()
@@ -438,6 +441,7 @@ export default function App() {
             let blocked = false
             for (const [id, other] of furnitureMeshesRef.current) {
               if (id === selId) continue
+              if (id === currentRestingOnId) continue
               other.updateWorldMatrix(true, true)
               const otherBox = new THREE.Box3().setFromObject(other)
               otherBox.expandByScalar(0.05)
@@ -449,6 +453,19 @@ export default function App() {
             if (blocked) {
               obj.position.copy(prevPos)
               return
+            }
+
+            // If we moved off the supporting item, clear restingOnId
+            if (currentRestingOnId) {
+              const supportObj = furnitureMeshesRef.current.get(currentRestingOnId)
+              if (supportObj) {
+                supportObj.updateWorldMatrix(true, true)
+                const supportBox = new THREE.Box3().setFromObject(supportObj)
+                supportBox.expandByScalar(0.05)
+                if (!nudgedBox.intersectsBox(supportBox)) {
+                  currentRestingOnId = null
+                }
+              }
             }
           }
 
