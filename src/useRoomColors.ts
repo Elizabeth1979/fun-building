@@ -28,5 +28,5 @@ export function useRoomColors() {
     setColors(prev => applyColor(prev, surface, color))
   }
 
-  return { selectedSurface, setSelectedSurface, colors, setColor }
+  return { selectedSurface, setSelectedSurface, colors, setColors, setColor }
 }

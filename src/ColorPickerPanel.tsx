@@ -12,6 +12,8 @@ interface Props {
   onSurfaceChange: (s: Surface) => void
   colors: RoomColors
   onColorChange: (surface: Surface, color: string) => void
+  onSave: () => void
+  onLoad: () => void
 }
 
 export function ColorPickerPanel({
@@ -19,6 +21,8 @@ export function ColorPickerPanel({
   onSurfaceChange,
   colors,
   onColorChange,
+  onSave,
+  onLoad,
 }: Props) {
   return (
     <div
@@ -96,6 +100,42 @@ export function ColorPickerPanel({
         }}
         title="Pick any color"
       />
+
+      {/* Save / Load */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <button
+          onClick={onSave}
+          style={{
+            flex: 1,
+            padding: '5px 0',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            background: '#6bcb77',
+            color: '#fff',
+          }}
+        >
+          Save
+        </button>
+        <button
+          onClick={onLoad}
+          style={{
+            flex: 1,
+            padding: '5px 0',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            background: '#4d96ff',
+            color: '#fff',
+          }}
+        >
+          Load
+        </button>
+      </div>
     </div>
   )
 }

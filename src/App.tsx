@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { useRoomColors } from './useRoomColors'
+import { saveScene, loadScene } from './persistence'
 
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -12,7 +13,19 @@ export default function App() {
   const ceilingMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
   const floorMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
 
-  const { selectedSurface, setSelectedSurface, colors, setColor } = useRoomColors()
+  const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
+
+  // Auto-load saved colors on first render
+  useEffect(() => {
+    const saved = loadScene()
+    if (saved) setColors(saved)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = () => saveScene(colors)
+  const handleLoad = () => {
+    const saved = loadScene()
+    if (saved) setColors(saved)
+  }
 
   // Sync wall color → Three.js materials
   useEffect(() => {
@@ -148,6 +161,8 @@ export default function App() {
         onSurfaceChange={setSelectedSurface}
         colors={colors}
         onColorChange={setColor}
+        onSave={handleSave}
+        onLoad={handleLoad}
       />
     </div>
   )
