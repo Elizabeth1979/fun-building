@@ -25,12 +25,12 @@ export const FURNITURE_DIMS: Record<string, FurnitureDims> = {
 // Catalog items — templates for placing furniture in the room.
 // position.y = height/2 so the mesh sits flush on the floor (y=0).
 export const FURNITURE_CATALOG: FurnitureItem[] = [
-  { id: 'sofa',      name: 'Sofa',      position: { x: 0, y: 0.4,  z: 0 }, rotation: 0, color: '#6b8cba', meshType: 'box'      },
-  { id: 'table',     name: 'Table',     position: { x: 0, y: 0.4,  z: 0 }, rotation: 0, color: '#8b5e3c', meshType: 'box'      },
-  { id: 'chair',     name: 'Chair',     position: { x: 0, y: 0.45, z: 0 }, rotation: 0, color: '#e8a87c', meshType: 'box'      },
+  { id: 'sofa',      name: 'Sofa',      position: { x: 0, y: 0.4,  z: 0 }, rotation: 0, color: '#8b4513', meshType: 'box'      },
+  { id: 'table',     name: 'Table',     position: { x: 0, y: 0.4,  z: 0 }, rotation: 0, color: '#d2b48c', meshType: 'box'      },
+  { id: 'chair',     name: 'Chair',     position: { x: 0, y: 0.45, z: 0 }, rotation: 0, color: '#808080', meshType: 'box'      },
   { id: 'lamp',      name: 'Lamp',      position: { x: 0, y: 0.75, z: 0 }, rotation: 0, color: '#ffd700', meshType: 'cylinder' },
-  { id: 'bed',       name: 'Bed',       position: { x: 0, y: 0.3,  z: 0 }, rotation: 0, color: '#b4e7b4', meshType: 'box'      },
-  { id: 'bookshelf', name: 'Bookshelf', position: { x: 0, y: 1.0,  z: 0 }, rotation: 0, color: '#a0522d', meshType: 'box'      },
+  { id: 'bed',       name: 'Bed',       position: { x: 0, y: 0.3,  z: 0 }, rotation: 0, color: '#000080', meshType: 'box'      },
+  { id: 'bookshelf', name: 'Bookshelf', position: { x: 0, y: 1.0,  z: 0 }, rotation: 0, color: '#3b1a08', meshType: 'box'      },
 ]
 
 // Returns the catalog-base id for a placed item (strips the timestamp suffix).
