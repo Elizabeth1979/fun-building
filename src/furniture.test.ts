@@ -2,23 +2,19 @@ import { describe, it, expect } from 'vitest'
 import {
   FURNITURE_CATALOG,
   FURNITURE_DIMS,
+  FURNITURE_CATEGORIES,
   catalogIdOf,
   type FurnitureItem,
 } from './furniture'
 
 describe('FURNITURE_CATALOG', () => {
-  it('contains exactly 6 items', () => {
-    expect(FURNITURE_CATALOG).toHaveLength(6)
+  it('contains exactly 40 items', () => {
+    expect(FURNITURE_CATALOG).toHaveLength(40)
   })
 
-  it('contains the required furniture names', () => {
-    const names = FURNITURE_CATALOG.map(i => i.name)
-    expect(names).toContain('Sofa')
-    expect(names).toContain('Table')
-    expect(names).toContain('Chair')
-    expect(names).toContain('Lamp')
-    expect(names).toContain('Bed')
-    expect(names).toContain('Bookshelf')
+  it('every item has a unique id', () => {
+    const ids = FURNITURE_CATALOG.map(i => i.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('each item has a valid meshType', () => {
@@ -26,12 +22,6 @@ describe('FURNITURE_CATALOG', () => {
     for (const item of FURNITURE_CATALOG) {
       expect(validTypes).toContain(item.meshType)
     }
-  })
-
-  it('uses all three meshTypes across the catalog', () => {
-    const types = new Set(FURNITURE_CATALOG.map(i => i.meshType))
-    expect(types.has('box')).toBe(true)
-    expect(types.has('cylinder')).toBe(true)
   })
 
   it('each item has a non-empty color string', () => {
@@ -58,19 +48,48 @@ describe('FURNITURE_CATALOG', () => {
       expect(FURNITURE_DIMS).toHaveProperty(item.id)
     }
   })
+
+  it('each item has a category from FURNITURE_CATEGORIES', () => {
+    const validCategories = new Set<string>(FURNITURE_CATEGORIES)
+    for (const item of FURNITURE_CATALOG) {
+      expect(item.category).toBeDefined()
+      expect(validCategories.has(item.category!)).toBe(true)
+    }
+  })
+
+  it('each item has a modelPath', () => {
+    for (const item of FURNITURE_CATALOG) {
+      expect(item.modelPath).toMatch(/^\/models\/.+\.glb$/)
+    }
+  })
+})
+
+describe('FURNITURE_CATEGORIES', () => {
+  it('has 6 categories', () => {
+    expect(FURNITURE_CATEGORIES).toHaveLength(6)
+  })
+
+  it('every category has at least one item', () => {
+    for (const cat of FURNITURE_CATEGORIES) {
+      const items = FURNITURE_CATALOG.filter(i => i.category === cat)
+      expect(items.length).toBeGreaterThan(0)
+    }
+  })
 })
 
 describe('FURNITURE_DIMS', () => {
   it('box dims have 3 values', () => {
-    expect(FURNITURE_DIMS['sofa']).toHaveLength(3)
-    expect(FURNITURE_DIMS['table']).toHaveLength(3)
-    expect(FURNITURE_DIMS['chair']).toHaveLength(3)
-    expect(FURNITURE_DIMS['bed']).toHaveLength(3)
-    expect(FURNITURE_DIMS['bookshelf']).toHaveLength(3)
+    const boxItems = FURNITURE_CATALOG.filter(i => i.meshType === 'box')
+    for (const item of boxItems) {
+      expect(FURNITURE_DIMS[item.id]).toHaveLength(3)
+    }
   })
 
   it('cylinder dims have 2 values', () => {
-    expect(FURNITURE_DIMS['lamp']).toHaveLength(2)
+    const cylItems = FURNITURE_CATALOG.filter(i => i.meshType === 'cylinder')
+    for (const item of cylItems) {
+      expect(FURNITURE_DIMS[item.id]).toHaveLength(2)
+    }
   })
 
   it('all dimension values are positive', () => {
@@ -83,27 +102,27 @@ describe('FURNITURE_DIMS', () => {
 })
 
 describe('catalogIdOf', () => {
-  it('returns the id unchanged when there is no dash', () => {
+  it('returns the id unchanged when there is no dash-number suffix', () => {
     const item: FurnitureItem = {
-      id: 'sofa', name: 'Sofa', position: { x: 0, y: 0.4, z: 0 },
+      id: 'loungeSofa', name: 'Sofa', position: { x: 0, y: 0, z: 0 },
       rotation: 0, color: '#6b8cba', meshType: 'box',
     }
-    expect(catalogIdOf(item)).toBe('sofa')
+    expect(catalogIdOf(item)).toBe('loungeSofa')
   })
 
-  it('strips the timestamp suffix from placed item ids', () => {
+  it('strips the numeric suffix from placed item ids', () => {
     const item: FurnitureItem = {
-      id: 'sofa-1712345678', name: 'Sofa', position: { x: 1, y: 0.4, z: 2 },
+      id: 'loungeSofa-1712345678', name: 'Sofa', position: { x: 1, y: 0, z: 2 },
       rotation: 0, color: '#6b8cba', meshType: 'box',
     }
-    expect(catalogIdOf(item)).toBe('sofa')
+    expect(catalogIdOf(item)).toBe('loungeSofa')
   })
 
-  it('handles multi-segment ids correctly', () => {
+  it('handles camelCase ids correctly', () => {
     const item: FurnitureItem = {
-      id: 'bookshelf-9999', name: 'Bookshelf', position: { x: 0, y: 1, z: 0 },
+      id: 'kitchenCoffeeMachine-9999', name: 'Coffee Machine', position: { x: 0, y: 0, z: 0 },
       rotation: 0, color: '#a0522d', meshType: 'box',
     }
-    expect(catalogIdOf(item)).toBe('bookshelf')
+    expect(catalogIdOf(item)).toBe('kitchenCoffeeMachine')
   })
 })

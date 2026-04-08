@@ -41,6 +41,12 @@ export function removePlacedItem(items: FurnitureItem[], id: string): FurnitureI
   return items.filter(item => item.id !== id)
 }
 
+export function rotatePlacedItem(items: FurnitureItem[], id: string): FurnitureItem[] {
+  return items.map(item =>
+    item.id === id ? { ...item, rotation: item.rotation + Math.PI / 4 } : item,
+  )
+}
+
 export function clampPosition(
   pos: { x: number; z: number },
   halfW: number,
@@ -74,5 +80,9 @@ export function useFurniture() {
     setSelectedItemId(prev => (prev === id ? null : prev))
   }
 
-  return { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, removeItem }
+  function rotateItem(id: string): void {
+    setPlacedItems(prev => rotatePlacedItem(prev, id))
+  }
+
+  return { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, removeItem, rotateItem }
 }

@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { createPlacedItem, movePlacedItem, removePlacedItem, clampPosition } from './useFurniture'
+import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, clampPosition } from './useFurniture'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_CATALOG } from './furniture'
 
-const SOFA = FURNITURE_CATALOG.find(i => i.id === 'sofa')!
-const LAMP = FURNITURE_CATALOG.find(i => i.id === 'lamp')!
+const SOFA = FURNITURE_CATALOG.find(i => i.id === 'loungeSofa')!
+const LAMP = FURNITURE_CATALOG.find(i => i.id === 'lampSquareFloor')!
 
 describe('createPlacedItem', () => {
   it('creates a new id by appending a numeric suffix', () => {
     const placed = createPlacedItem(SOFA)
-    expect(placed.id).toMatch(/^sofa-\d+$/)
+    expect(placed.id).toMatch(/^loungeSofa-\d+$/)
   })
 
   it('different calls produce different ids', () => {
@@ -118,6 +118,45 @@ describe('removePlacedItem', () => {
     const single = [createPlacedItem(SOFA)]
     const result = removePlacedItem(single, single[0].id)
     expect(result).toHaveLength(0)
+  })
+})
+
+describe('rotatePlacedItem', () => {
+  const items: FurnitureItem[] = [
+    createPlacedItem(SOFA),
+    createPlacedItem(LAMP),
+  ]
+
+  it('increments rotation by Math.PI/4 (45 degrees)', () => {
+    const result = rotatePlacedItem(items, items[0].id)
+    expect(result[0].rotation).toBeCloseTo(Math.PI / 4)
+  })
+
+  it('returns a new array (does not mutate)', () => {
+    const result = rotatePlacedItem(items, items[0].id)
+    expect(result).not.toBe(items)
+  })
+
+  it('leaves other items unchanged', () => {
+    const result = rotatePlacedItem(items, items[0].id)
+    expect(result[1]).toEqual(items[1])
+  })
+
+  it('stacks rotations on repeated calls', () => {
+    const once = rotatePlacedItem(items, items[0].id)
+    const twice = rotatePlacedItem(once, items[0].id)
+    expect(twice[0].rotation).toBeCloseTo(Math.PI / 2)
+  })
+
+  it('does not mutate original item objects', () => {
+    const originalRotation = items[0].rotation
+    rotatePlacedItem(items, items[0].id)
+    expect(items[0].rotation).toBe(originalRotation)
+  })
+
+  it('returns the original array contents if id is not found', () => {
+    const result = rotatePlacedItem(items, 'nonexistent')
+    expect(result).toEqual(items)
   })
 })
 

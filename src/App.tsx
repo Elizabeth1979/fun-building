@@ -108,7 +108,7 @@ export default function App() {
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
   // Furniture state
-  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem } = useFurniture()
+  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, rotateItem } = useFurniture()
 
   // Scene + mesh refs shared between effects and event handlers
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -118,10 +118,14 @@ export default function App() {
   const moveItemRef = useRef(moveItem)
   const setSelectedItemIdRef = useRef(setSelectedItemId)
   const placedItemsRef = useRef(placedItems)
+  const rotateItemRef = useRef(rotateItem)
+  const selectedItemIdRef = useRef(selectedItemId)
 
   useEffect(() => { moveItemRef.current = moveItem }, [moveItem])
   useEffect(() => { setSelectedItemIdRef.current = setSelectedItemId }, [setSelectedItemId])
   useEffect(() => { placedItemsRef.current = placedItems }, [placedItems])
+  useEffect(() => { rotateItemRef.current = rotateItem }, [rotateItem])
+  useEffect(() => { selectedItemIdRef.current = selectedItemId }, [selectedItemId])
 
   // Refs for physics state — read inside the animation loop without stale closure issues
   const isPlayModeRef = useRef(false)
@@ -349,9 +353,19 @@ export default function App() {
       controls.enabled = true
     }
 
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'r' || e.key === 'R') {
+        const selId = selectedItemIdRef.current
+        if (selId && !isPlayModeRef.current) {
+          rotateItemRef.current(selId)
+        }
+      }
+    }
+
     renderer.domElement.addEventListener('mousedown', onMouseDown)
     renderer.domElement.addEventListener('mousemove', onMouseMove)
     renderer.domElement.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('keydown', onKeyDown)
 
     // Resize handler
     function onResize() {
@@ -377,6 +391,7 @@ export default function App() {
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('keydown', onKeyDown)
       renderer.domElement.removeEventListener('mousedown', onMouseDown)
       renderer.domElement.removeEventListener('mousemove', onMouseMove)
       renderer.domElement.removeEventListener('mouseup', onMouseUp)
@@ -464,6 +479,35 @@ export default function App() {
         </div>
       )}
       {mode === 'build' && <FurniturePanel onPlaceItem={addItem} />}
+      {mode === 'build' && selectedItemId && (
+        <button
+          onClick={() => rotateItem(selectedItemId)}
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            border: '2px solid rgba(0,0,0,0.15)',
+            background: 'rgba(255,255,255,0.92)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            cursor: 'pointer',
+            fontSize: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            userSelect: 'none',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#e8f0fe' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.92)' }}
+          title="Rotate 45° (R)"
+        >
+          ↻
+        </button>
+      )}
       <ColorPickerPanel
         selectedSurface={selectedSurface}
         onSurfaceChange={setSelectedSurface}
