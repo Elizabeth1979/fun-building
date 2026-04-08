@@ -14,6 +14,12 @@ export async function loadModel(path: string): Promise<THREE.Group> {
     : path
 
   const gltf = await loader.loadAsync(fullPath)
+  // Pre-compute bounding boxes for all child meshes so Box3.setFromObject works correctly
+  gltf.scene.traverse(child => {
+    if ((child as THREE.Mesh).isMesh) {
+      (child as THREE.Mesh).geometry.computeBoundingBox()
+    }
+  })
   cache.set(path, gltf.scene)
   return gltf.scene.clone()
 }

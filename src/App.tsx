@@ -317,37 +317,76 @@ export default function App() {
       if (!isDragging || dragItemId === null) return
       toNDC(e)
       raycaster.setFromCamera(mouse, camera)
-      if (raycaster.ray.intersectPlane(floorPlane, dragTarget)) {
-        const item = placedItemsRef.current.find(i => i.id === dragItemId)
-        const catalogId = item ? catalogIdOf(item) : null
-        const dims = catalogId ? (FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]) : [0.5, 0.5, 0.5]
-        const halfW = item?.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
-        const halfD = item?.meshType === 'box' ? (dims[2] as number) / 2 : halfW
-        const clamped = clampPosition({ x: dragTarget.x, z: dragTarget.z }, halfW, halfD, 5)
 
-        // Box3 collision check: reject move if it would overlap another item
-        const draggedObj = furnitureMeshesRef.current.get(dragItemId)
-        if (draggedObj) {
-          const prevPos = draggedObj.position.clone()
-          draggedObj.position.set(clamped.x, dragItemY, clamped.z)
-          const draggedBox = new THREE.Box3().setFromObject(draggedObj)
-          let blocked = false
-          for (const [id, obj] of furnitureMeshesRef.current) {
-            if (id === dragItemId) continue
-            const otherBox = new THREE.Box3().setFromObject(obj)
-            if (draggedBox.intersectsBox(otherBox)) {
-              blocked = true
-              break
-            }
-          }
-          if (blocked) {
-            draggedObj.position.copy(prevPos)
-            return
+      const item = placedItemsRef.current.find(i => i.id === dragItemId)
+      const catalogId = item ? catalogIdOf(item) : null
+      const dims = catalogId ? (FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]) : [0.5, 0.5, 0.5]
+      const halfW = item?.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
+      const halfD = item?.meshType === 'box' ? (dims[2] as number) / 2 : halfW
+      const halfH = item?.meshType === 'cylinder' ? (dims[1] as number) / 2
+        : item?.meshType === 'sphere' ? (dims[0] as number)
+        : (dims[1] as number) / 2
+
+      // Raycast against other furniture first to allow placing items on top
+      const otherMeshes: THREE.Object3D[] = []
+      for (const [id, obj] of furnitureMeshesRef.current) {
+        if (id === dragItemId) continue
+        obj.traverse(child => { if (child instanceof THREE.Mesh) otherMeshes.push(child) })
+      }
+      const furnitureHits = raycaster.intersectObjects(otherMeshes)
+
+      let targetX: number
+      let targetY: number
+      let targetZ: number
+      let restingOnId: string | null = null
+
+      if (furnitureHits.length > 0) {
+        // Place on top of the hit furniture
+        const hit = furnitureHits[0]
+        const hitId = findFurnitureParent(hit.object, furnitureMeshesRef.current)
+        targetX = hit.point.x
+        targetY = hit.point.y + halfH
+        targetZ = hit.point.z
+        restingOnId = hitId
+      } else if (raycaster.ray.intersectPlane(floorPlane, dragTarget)) {
+        // Fall back to floor plane
+        targetX = dragTarget.x
+        targetY = dragItemY
+        targetZ = dragTarget.z
+      } else {
+        return
+      }
+
+      const clamped = clampPosition({ x: targetX, z: targetZ }, halfW, halfD, 5)
+
+      // Box3 collision check: reject move if it would overlap another item
+      // Skip collision with the item we're resting on (intentionally touching)
+      const draggedObj = furnitureMeshesRef.current.get(dragItemId)
+      if (draggedObj) {
+        const prevPos = draggedObj.position.clone()
+        draggedObj.position.set(clamped.x, targetY, clamped.z)
+        draggedObj.updateWorldMatrix(true, true)
+        const draggedBox = new THREE.Box3().setFromObject(draggedObj)
+        draggedBox.expandByScalar(0.05)
+        let blocked = false
+        for (const [id, obj] of furnitureMeshesRef.current) {
+          if (id === dragItemId) continue
+          if (id === restingOnId) continue // skip the item we're stacking on
+          obj.updateWorldMatrix(true, true)
+          const otherBox = new THREE.Box3().setFromObject(obj)
+          otherBox.expandByScalar(0.05)
+          if (draggedBox.intersectsBox(otherBox)) {
+            blocked = true
+            break
           }
         }
-
-        moveItemRef.current(dragItemId, { x: clamped.x, y: dragItemY, z: clamped.z })
+        if (blocked) {
+          draggedObj.position.copy(prevPos)
+          return
+        }
       }
+
+      moveItemRef.current(dragItemId, { x: clamped.x, y: targetY, z: clamped.z })
     }
 
     function onMouseUp() {
@@ -393,11 +432,16 @@ export default function App() {
           if (obj) {
             const prevPos = obj.position.clone()
             obj.position.set(nudgedItem.position.x, nudgedItem.position.y, nudgedItem.position.z)
+            obj.updateWorldMatrix(true, true)
             const nudgedBox = new THREE.Box3().setFromObject(obj)
+            nudgedBox.expandByScalar(0.05)
             let blocked = false
             for (const [id, other] of furnitureMeshesRef.current) {
               if (id === selId) continue
-              if (nudgedBox.intersectsBox(new THREE.Box3().setFromObject(other))) {
+              other.updateWorldMatrix(true, true)
+              const otherBox = new THREE.Box3().setFromObject(other)
+              otherBox.expandByScalar(0.05)
+              if (nudgedBox.intersectsBox(otherBox)) {
                 blocked = true
                 break
               }
