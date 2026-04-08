@@ -3,6 +3,9 @@
 ## Project
 A 3D house builder game for kids. Built by Elli + kid, AI writes the code.
 
+## Model
+Always use claude-opus-4-5 for all code changes in this project.
+
 ## Stack
 - Vite + React + TypeScript
 - Three.js (3D rendering)
