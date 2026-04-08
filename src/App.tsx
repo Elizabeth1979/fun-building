@@ -108,7 +108,7 @@ export default function App() {
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
   // Furniture state
-  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, rotateItem } = useFurniture()
+  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, removeItem, rotateItem } = useFurniture()
 
   // Scene + mesh refs shared between effects and event handlers
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -119,12 +119,14 @@ export default function App() {
   const setSelectedItemIdRef = useRef(setSelectedItemId)
   const placedItemsRef = useRef(placedItems)
   const rotateItemRef = useRef(rotateItem)
+  const removeItemRef = useRef(removeItem)
   const selectedItemIdRef = useRef(selectedItemId)
 
   useEffect(() => { moveItemRef.current = moveItem }, [moveItem])
   useEffect(() => { setSelectedItemIdRef.current = setSelectedItemId }, [setSelectedItemId])
   useEffect(() => { placedItemsRef.current = placedItems }, [placedItems])
   useEffect(() => { rotateItemRef.current = rotateItem }, [rotateItem])
+  useEffect(() => { removeItemRef.current = removeItem }, [removeItem])
   useEffect(() => { selectedItemIdRef.current = selectedItemId }, [selectedItemId])
 
   // Refs for physics state — read inside the animation loop without stale closure issues
@@ -287,6 +289,7 @@ export default function App() {
     }
 
     function onMouseDown(e: MouseEvent) {
+      mount?.focus()
       if (isPlayModeRef.current) return // no dragging during physics
       toNDC(e)
       raycaster.setFromCamera(mouse, camera)
@@ -354,10 +357,14 @@ export default function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'r' || e.key === 'R') {
-        const selId = selectedItemIdRef.current
-        if (selId && !isPlayModeRef.current) {
+      const selId = selectedItemIdRef.current
+      if (selId && !isPlayModeRef.current) {
+        if (e.key === 'r' || e.key === 'R') {
           rotateItemRef.current(selId)
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault()
+          removeItemRef.current(selId)
         }
       }
     }
@@ -365,6 +372,7 @@ export default function App() {
     renderer.domElement.addEventListener('mousedown', onMouseDown)
     renderer.domElement.addEventListener('mousemove', onMouseMove)
     renderer.domElement.addEventListener('mouseup', onMouseUp)
+    mount.addEventListener('keydown', onKeyDown)
     window.addEventListener('keydown', onKeyDown)
 
     // Resize handler
@@ -391,6 +399,7 @@ export default function App() {
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', onResize)
+      mount.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keydown', onKeyDown)
       renderer.domElement.removeEventListener('mousedown', onMouseDown)
       renderer.domElement.removeEventListener('mousemove', onMouseMove)
@@ -411,7 +420,7 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
-      <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={mountRef} tabIndex={0} style={{ width: '100%', height: '100%', outline: 'none' }} />
 
       {/* Build / Play toggle — centered at top */}
       <div style={{
@@ -516,6 +525,23 @@ export default function App() {
         onSave={handleSave}
         onLoad={handleLoad}
       />
+      <div style={{
+        position: 'absolute',
+        bottom: 8,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'rgba(0,0,0,0.55)',
+        color: '#eee',
+        fontSize: 12,
+        padding: '5px 14px',
+        borderRadius: 16,
+        userSelect: 'none',
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        letterSpacing: 0.3,
+      }}>
+        Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move
+      </div>
     </div>
   )
 }
