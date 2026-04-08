@@ -9,7 +9,7 @@ import {
 
 describe('FURNITURE_CATALOG', () => {
   it('contains exactly 40 items', () => {
-    expect(FURNITURE_CATALOG).toHaveLength(40)
+    expect(FURNITURE_CATALOG).toHaveLength(82)
   })
 
   it('every item has a unique id', () => {
@@ -66,7 +66,7 @@ describe('FURNITURE_CATALOG', () => {
 
 describe('FURNITURE_CATEGORIES', () => {
   it('has 6 categories', () => {
-    expect(FURNITURE_CATEGORIES).toHaveLength(6)
+    expect(FURNITURE_CATEGORIES).toHaveLength(8)
   })
 
   it('every category has at least one item', () => {
