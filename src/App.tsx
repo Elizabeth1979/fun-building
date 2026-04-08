@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
@@ -47,6 +48,15 @@ async function buildFurnitureModel(item: FurnitureItem): Promise<THREE.Object3D>
     const group = await loadModel(modelPath)
     group.position.set(item.position.x, item.position.y, item.position.z)
     group.rotation.y = item.rotation
+    group.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+        if (child.material instanceof THREE.MeshStandardMaterial) {
+          child.material.envMapIntensity = 1.0
+        }
+      }
+    })
     return group
   } catch {
     return buildFallbackMesh(item)
@@ -102,9 +112,9 @@ export default function App() {
   const mountRef = useRef<HTMLDivElement>(null)
 
   // Room color material refs
-  const wallMatsRef = useRef<THREE.MeshLambertMaterial[]>([])
-  const ceilingMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
-  const floorMatRef = useRef<THREE.MeshLambertMaterial | null>(null)
+  const wallMatsRef = useRef<THREE.MeshStandardMaterial[]>([])
+  const ceilingMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
+  const floorMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
 
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
@@ -231,6 +241,8 @@ export default function App() {
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     mount.appendChild(renderer.domElement)
@@ -251,29 +263,64 @@ export default function App() {
     scene.background = new THREE.Color(0x87ceeb)
     sceneRef.current = scene
 
+    // PBR environment for soft ambient lighting on all MeshStandardMaterials
+    const pmremGenerator = new THREE.PMREMGenerator(renderer)
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture
+
     // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3))
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
     dirLight.position.set(5, 10, 5)
+    dirLight.castShadow = true
+    dirLight.shadow.mapSize.width = 1024
+    dirLight.shadow.mapSize.height = 1024
+    dirLight.shadow.camera.near = 0.1
+    dirLight.shadow.camera.far = 50
     scene.add(dirLight)
 
     // Room
     const roomWidth = 10, roomHeight = 5, roomDepth = 10
-    const wallMat0 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat1 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const ceilingMat = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const bottomMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e, side: THREE.BackSide })
-    const wallMat4 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
-    const wallMat5 = new THREE.MeshLambertMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const texLoader = new THREE.TextureLoader()
+    const baseUrl = import.meta.env.BASE_URL
+
+    // Wall textures
+    const loadWallTexture = (file: string) => {
+      const tex = texLoader.load(`${baseUrl}textures/${file}`)
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+      tex.repeat.set(3, 2)
+      return tex
+    }
+    const wallColorTex = loadWallTexture('wall_color.jpg')
+    const wallNormalTex = loadWallTexture('wall_normal.jpg')
+    const wallRoughTex = loadWallTexture('wall_roughness.jpg')
+
+    // Floor textures
+    const loadFloorTexture = (file: string) => {
+      const tex = texLoader.load(`${baseUrl}textures/${file}`)
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+      tex.repeat.set(4, 4)
+      return tex
+    }
+    const floorColorTex = loadFloorTexture('floor_color.jpg')
+    const floorNormalTex = loadFloorTexture('floor_normal.jpg')
+    const floorRoughTex = loadFloorTexture('floor_roughness.jpg')
+
+    const wallMat0 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const wallMat1 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const ceilingMat = new THREE.MeshBasicMaterial({ color: 0xffe9c8, side: THREE.BackSide })
+    const bottomMat = new THREE.MeshStandardMaterial({ color: 0xc8a96e, side: THREE.BackSide, map: floorColorTex, normalMap: floorNormalTex, roughnessMap: floorRoughTex })
+    const wallMat4 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
+    const wallMat5 = new THREE.MeshStandardMaterial({ color: 0xffe9c8, side: THREE.BackSide, map: wallColorTex, normalMap: wallNormalTex, roughnessMap: wallRoughTex })
 
     wallMatsRef.current = [wallMat0, wallMat1, wallMat4, wallMat5]
     ceilingMatRef.current = ceilingMat
-
     floorMatRef.current = bottomMat
 
     const roomGeo = new THREE.BoxGeometry(roomWidth, roomHeight, roomDepth)
     const room = new THREE.Mesh(roomGeo, [wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5])
     room.position.set(0, roomHeight / 2, 0)
+    room.castShadow = false
+    room.receiveShadow = true
     scene.add(room)
 
     // Drag-and-drop raycasting state
@@ -568,7 +615,9 @@ export default function App() {
       renderer.domElement.removeEventListener('mousemove', onMouseMove)
       renderer.domElement.removeEventListener('mouseup', onMouseUp)
       controls.dispose()
+      pmremGenerator.dispose()
       roomGeo.dispose()
+      ;[wallColorTex, wallNormalTex, wallRoughTex, floorColorTex, floorNormalTex, floorRoughTex].forEach(t => t.dispose())
       ;[wallMat0, wallMat1, ceilingMat, bottomMat, wallMat4, wallMat5].forEach(m => m.dispose())
       for (const obj of furnitureMeshesRef.current.values()) {
         scene.remove(obj)
