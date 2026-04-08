@@ -7,6 +7,8 @@ import { useRoomColors } from './useRoomColors'
 import { useFurniture } from './useFurniture'
 import { saveScene, loadScene } from './persistence'
 import { useGodMode } from './useGodMode'
+import { useGameMode } from './useGameMode'
+import { usePhysics } from './usePhysics'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_DIMS, catalogIdOf } from './furniture'
 
@@ -35,6 +37,8 @@ function buildFurnitureMesh(item: FurnitureItem): THREE.Mesh {
 
 export default function App() {
   const isGodMode = useGodMode()
+  const { mode, toggle } = useGameMode()
+  const { initPhysics, stepPhysics, getFinalPositions, destroyPhysics } = usePhysics()
   const mountRef = useRef<HTMLDivElement>(null)
 
   // Room color material refs
@@ -59,6 +63,30 @@ export default function App() {
   useEffect(() => { moveItemRef.current = moveItem }, [moveItem])
   useEffect(() => { setSelectedItemIdRef.current = setSelectedItemId }, [setSelectedItemId])
   useEffect(() => { placedItemsRef.current = placedItems }, [placedItems])
+
+  // Refs for physics state — read inside the animation loop without stale closure issues
+  const isPlayModeRef = useRef(false)
+  const stepPhysicsRef = useRef(stepPhysics)
+  const furnitureMeshesForPhysicsRef = useRef(furnitureMeshesRef)
+  useEffect(() => { stepPhysicsRef.current = stepPhysics }, [stepPhysics])
+
+  // Enter / exit play mode
+  useEffect(() => {
+    if (mode === 'play') {
+      isPlayModeRef.current = false // not ready until init completes
+      initPhysics(placedItemsRef.current).then(() => {
+        isPlayModeRef.current = true
+      })
+    } else {
+      isPlayModeRef.current = false
+      // Sync final physics positions back to React state
+      const finalPositions = getFinalPositions()
+      for (const [id, pos] of finalPositions) {
+        moveItemRef.current(id, pos)
+      }
+      destroyPhysics()
+    }
+  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-load saved colors on first render
   useEffect(() => {
@@ -196,6 +224,7 @@ export default function App() {
     }
 
     function onMouseDown(e: MouseEvent) {
+      if (isPlayModeRef.current) return // no dragging during physics
       toNDC(e)
       raycaster.setFromCamera(mouse, camera)
       const hits = raycaster.intersectObjects(Array.from(furnitureMeshesRef.current.values()))
@@ -246,6 +275,9 @@ export default function App() {
     let animId: number
     function animate() {
       animId = requestAnimationFrame(animate)
+      if (isPlayModeRef.current) {
+        stepPhysicsRef.current(furnitureMeshesForPhysicsRef.current.current)
+      }
       controls.update()
       renderer.render(scene, camera)
     }
@@ -277,6 +309,52 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Build / Play toggle — centered at top */}
+      <div style={{
+        position: 'absolute',
+        top: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap: 0,
+        borderRadius: 24,
+        overflow: 'hidden',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+        userSelect: 'none',
+      }}>
+        <button
+          onClick={mode === 'play' ? toggle : undefined}
+          style={{
+            padding: '8px 22px',
+            fontWeight: 700,
+            fontSize: 14,
+            border: 'none',
+            cursor: mode === 'play' ? 'pointer' : 'default',
+            background: mode === 'build' ? '#4caf50' : '#555',
+            color: mode === 'build' ? '#fff' : '#bbb',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+        >
+          🔨 Build
+        </button>
+        <button
+          onClick={mode === 'build' ? toggle : undefined}
+          style={{
+            padding: '8px 22px',
+            fontWeight: 700,
+            fontSize: 14,
+            border: 'none',
+            cursor: mode === 'build' ? 'pointer' : 'default',
+            background: mode === 'play' ? '#e53935' : '#555',
+            color: mode === 'play' ? '#fff' : '#bbb',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+        >
+          ▶ Play
+        </button>
+      </div>
+
       {isGodMode && (
         <div style={{
           position: 'absolute',
@@ -297,7 +375,7 @@ export default function App() {
           ⚡ GOD MODE
         </div>
       )}
-      <FurniturePanel onPlaceItem={addItem} />
+      {mode === 'build' && <FurniturePanel onPlaceItem={addItem} />}
       <ColorPickerPanel
         selectedSurface={selectedSurface}
         onSurfaceChange={setSelectedSurface}
