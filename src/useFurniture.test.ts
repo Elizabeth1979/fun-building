@@ -18,15 +18,28 @@ describe('createPlacedItem', () => {
     expect(a.id).not.toBe(b.id)
   })
 
-  it('places the item centered at x=0, z=0', () => {
+  it('spawns at a random x between -3 and 3', () => {
     const placed = createPlacedItem(SOFA)
-    expect(placed.position.x).toBe(0)
-    expect(placed.position.z).toBe(0)
+    expect(placed.position.x).toBeGreaterThanOrEqual(-3.5) // allows for offset
+    expect(placed.position.x).toBeLessThanOrEqual(3.5)
+  })
+
+  it('spawns at a random z between -3 and 3', () => {
+    const placed = createPlacedItem(SOFA)
+    expect(placed.position.z).toBeGreaterThanOrEqual(-3.5)
+    expect(placed.position.z).toBeLessThanOrEqual(3.5)
   })
 
   it('preserves the template y position so it sits on the floor', () => {
     const placed = createPlacedItem(SOFA)
     expect(placed.position.y).toBe(SOFA.position.y)
+  })
+
+  it('two consecutive spawns never have the exact same x,z', () => {
+    const a = createPlacedItem(SOFA)
+    const b = createPlacedItem(SOFA)
+    const sameSpot = a.position.x === b.position.x && a.position.z === b.position.z
+    expect(sameSpot).toBe(false)
   })
 
   it('copies all other fields from the template', () => {

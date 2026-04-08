@@ -2,13 +2,30 @@ import { useState } from 'react'
 import type { FurnitureItem } from './furniture'
 
 let _idSeq = 0
+let _lastSpawnX = NaN
+let _lastSpawnZ = NaN
+
+function randomInRange(min: number, max: number): number {
+  return min + Math.random() * (max - min)
+}
 
 // Pure helpers — exported so they can be unit-tested without React
 export function createPlacedItem(template: FurnitureItem): FurnitureItem {
+  let x = randomInRange(-3, 3)
+  let z = randomInRange(-3, 3)
+
+  // Ensure two consecutive spawns never land in the exact same spot
+  if (x === _lastSpawnX && z === _lastSpawnZ) {
+    x += 0.5
+    z += 0.5
+  }
+  _lastSpawnX = x
+  _lastSpawnZ = z
+
   return {
     ...template,
     id: `${template.id}-${++_idSeq}`,
-    position: { x: 0, y: template.position.y, z: 0 },
+    position: { x, y: template.position.y, z },
   }
 }
 
