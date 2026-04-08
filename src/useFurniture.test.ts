@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, clampPosition } from './useFurniture'
+import { createPlacedItem, movePlacedItem, removePlacedItem, rotatePlacedItem, nudgePlacedItem, clampPosition } from './useFurniture'
 import type { FurnitureItem } from './furniture'
 import { FURNITURE_CATALOG } from './furniture'
 
@@ -156,6 +156,52 @@ describe('rotatePlacedItem', () => {
 
   it('returns the original array contents if id is not found', () => {
     const result = rotatePlacedItem(items, 'nonexistent')
+    expect(result).toEqual(items)
+  })
+})
+
+describe('nudgePlacedItem', () => {
+  const items: FurnitureItem[] = [
+    createPlacedItem(SOFA),
+    createPlacedItem(LAMP),
+  ]
+
+  it('nudges x position by the given delta', () => {
+    const result = nudgePlacedItem(items, items[0].id, 0.1, 0, 0.5, 0.5, 5)
+    expect(result[0].position.x).toBeCloseTo(items[0].position.x + 0.1)
+    expect(result[0].position.z).toBeCloseTo(items[0].position.z)
+  })
+
+  it('nudges z position by the given delta', () => {
+    const result = nudgePlacedItem(items, items[0].id, 0, -0.1, 0.5, 0.5, 5)
+    expect(result[0].position.z).toBeCloseTo(items[0].position.z - 0.1)
+    expect(result[0].position.x).toBeCloseTo(items[0].position.x)
+  })
+
+  it('preserves y position', () => {
+    const result = nudgePlacedItem(items, items[0].id, 0.1, 0, 0.5, 0.5, 5)
+    expect(result[0].position.y).toBe(items[0].position.y)
+  })
+
+  it('clamps to wall bounds after nudging', () => {
+    // Move item to near-edge, then nudge past it
+    const atEdge = movePlacedItem(items, items[0].id, { x: 4.5, y: items[0].position.y, z: 0 })
+    const result = nudgePlacedItem(atEdge, items[0].id, 0.1, 0, 0.5, 0.5, 5)
+    expect(result[0].position.x).toBe(4.5) // clamped to 5 - 0.5
+  })
+
+  it('returns a new array (does not mutate)', () => {
+    const result = nudgePlacedItem(items, items[0].id, 0.1, 0, 0.5, 0.5, 5)
+    expect(result).not.toBe(items)
+  })
+
+  it('leaves other items unchanged', () => {
+    const result = nudgePlacedItem(items, items[0].id, 0.1, 0, 0.5, 0.5, 5)
+    expect(result[1]).toEqual(items[1])
+  })
+
+  it('returns original contents if id not found', () => {
+    const result = nudgePlacedItem(items, 'nonexistent', 0.1, 0, 0.5, 0.5, 5)
     expect(result).toEqual(items)
   })
 })

@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
-import { useFurniture, clampPosition } from './useFurniture'
+import { useFurniture, clampPosition, nudgePlacedItem } from './useFurniture'
 import { saveScene, loadScene } from './persistence'
 import { useGodMode } from './useGodMode'
 import { useGameMode } from './useGameMode'
@@ -366,6 +366,50 @@ export default function App() {
           e.preventDefault()
           removeItemRef.current(selId)
         }
+
+        // Arrow-key nudge
+        let dx = 0
+        let dz = 0
+        if (e.key === 'ArrowLeft') dx = -0.1
+        else if (e.key === 'ArrowRight') dx = 0.1
+        else if (e.key === 'ArrowUp') dz = -0.1
+        else if (e.key === 'ArrowDown') dz = 0.1
+
+        if (dx !== 0 || dz !== 0) {
+          e.preventDefault()
+          const item = placedItemsRef.current.find(i => i.id === selId)
+          if (!item) return
+          const catalogId = catalogIdOf(item)
+          const dims = FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]
+          const halfW = item.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
+          const halfD = item.meshType === 'box' ? (dims[2] as number) / 2 : halfW
+
+          const nudged = nudgePlacedItem(placedItemsRef.current, selId, dx, dz, halfW, halfD, 5)
+          const nudgedItem = nudged.find(i => i.id === selId)
+          if (!nudgedItem) return
+
+          // Box3 collision check (same pattern as drag)
+          const obj = furnitureMeshesRef.current.get(selId)
+          if (obj) {
+            const prevPos = obj.position.clone()
+            obj.position.set(nudgedItem.position.x, nudgedItem.position.y, nudgedItem.position.z)
+            const nudgedBox = new THREE.Box3().setFromObject(obj)
+            let blocked = false
+            for (const [id, other] of furnitureMeshesRef.current) {
+              if (id === selId) continue
+              if (nudgedBox.intersectsBox(new THREE.Box3().setFromObject(other))) {
+                blocked = true
+                break
+              }
+            }
+            if (blocked) {
+              obj.position.copy(prevPos)
+              return
+            }
+          }
+
+          moveItemRef.current(selId, nudgedItem.position)
+        }
       }
     }
 
@@ -540,7 +584,7 @@ export default function App() {
         whiteSpace: 'nowrap',
         letterSpacing: 0.3,
       }}>
-        Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move
+        Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move &nbsp;&bull;&nbsp; &larr; &rarr; &uarr; &darr; nudge
       </div>
     </div>
   )

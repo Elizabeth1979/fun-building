@@ -47,6 +47,27 @@ export function rotatePlacedItem(items: FurnitureItem[], id: string): FurnitureI
   )
 }
 
+export function nudgePlacedItem(
+  items: FurnitureItem[],
+  id: string,
+  dx: number,
+  dz: number,
+  halfW: number,
+  halfD: number,
+  roomHalf: number,
+): FurnitureItem[] {
+  return items.map(item => {
+    if (item.id !== id) return item
+    const clamped = clampPosition(
+      { x: item.position.x + dx, z: item.position.z + dz },
+      halfW,
+      halfD,
+      roomHalf,
+    )
+    return { ...item, position: { x: clamped.x, y: item.position.y, z: clamped.z } }
+  })
+}
+
 export function clampPosition(
   pos: { x: number; z: number },
   halfW: number,
