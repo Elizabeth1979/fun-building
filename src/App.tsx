@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
@@ -97,6 +97,7 @@ function findFurnitureParent(
 export default function App() {
   const isGodMode = useGodMode()
   const { mode, toggle } = useGameMode()
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const { initPhysics, stepPhysics, getFinalPositions, destroyPhysics } = usePhysics()
   const mountRef = useRef<HTMLDivElement>(null)
 
@@ -369,7 +370,8 @@ export default function App() {
         draggedObj.updateWorldMatrix(true, true)
         const draggedBox = new THREE.Box3().setFromObject(draggedObj)
         draggedBox.expandByScalar(0.05)
-        let blocked = false
+        const dragOtherCount = furnitureMeshesRef.current.size - 1
+        let dragIntersectCount = 0
         for (const [id, obj] of furnitureMeshesRef.current) {
           if (id === dragItemId) continue
           if (id === restingOnId) continue // skip the item we're stacking on
@@ -377,11 +379,12 @@ export default function App() {
           const otherBox = new THREE.Box3().setFromObject(obj)
           otherBox.expandByScalar(0.05)
           if (draggedBox.intersectsBox(otherBox)) {
-            blocked = true
-            break
+            dragIntersectCount++
           }
         }
-        if (blocked) {
+        // If intersects more than half of items, bounding box is broken — skip collision
+        const dragBlocked = dragIntersectCount > 0 && dragOtherCount > 0 && dragIntersectCount <= dragOtherCount / 2
+        if (dragBlocked) {
           draggedObj.position.copy(prevPos)
           return
         }
@@ -399,14 +402,22 @@ export default function App() {
 
     function onKeyDown(e: KeyboardEvent) {
       // Tab / Shift+Tab: cycle through placed furniture items
+      // Skip key repeats so holding Tab doesn't cycle through all items at once
       if (e.key === 'Tab' && !isPlayModeRef.current) {
         e.preventDefault()
+        if (e.repeat) return
         const items = placedItemsRef.current
         const current = selectedItemIdRef.current
         const nextId = e.shiftKey
           ? getPrevItemId(items, current)
           : getNextItemId(items, current)
         setSelectedItemIdRef.current(nextId)
+        return
+      }
+
+      // Escape: deselect current item
+      if (e.key === 'Escape') {
+        setSelectedItemIdRef.current(null)
         return
       }
 
@@ -450,6 +461,10 @@ export default function App() {
             obj.updateWorldMatrix(true, true)
             const nudgedBox = new THREE.Box3().setFromObject(obj)
             nudgedBox.expandByScalar(0.05)
+
+            // Count how many other items we intersect with
+            const otherCount = furnitureMeshesRef.current.size - 1
+            let intersectCount = 0
             let blocked = false
             for (const [id, other] of furnitureMeshesRef.current) {
               if (id === selId) continue
@@ -458,9 +473,29 @@ export default function App() {
               const otherBox = new THREE.Box3().setFromObject(other)
               otherBox.expandByScalar(0.05)
               if (nudgedBox.intersectsBox(otherBox)) {
-                blocked = true
-                break
+                intersectCount++
               }
+            }
+
+            // If the dragged item intersects more than half of all others,
+            // its bounding box is probably broken — skip collision check
+            if (intersectCount > 0 && otherCount > 0 && intersectCount <= otherCount / 2) {
+              blocked = true
+              // eslint-disable-next-line no-console
+              const boxSize = nudgedBox.getSize(new THREE.Vector3())
+              console.warn(
+                `[nudge] Item "${selId}" blocked — box size:`,
+                boxSize.x.toFixed(2), boxSize.y.toFixed(2), boxSize.z.toFixed(2),
+                `intersects ${intersectCount}/${otherCount} items`,
+              )
+            } else if (intersectCount > otherCount / 2) {
+              // eslint-disable-next-line no-console
+              const boxSize = nudgedBox.getSize(new THREE.Vector3())
+              console.warn(
+                `[nudge] Item "${selId}" has oversized bounding box — skipping collision.`,
+                'Box size:', boxSize.x.toFixed(2), boxSize.y.toFixed(2), boxSize.z.toFixed(2),
+                `intersects ${intersectCount}/${otherCount} items`,
+              )
             }
             if (blocked) {
               obj.position.copy(prevPos)
@@ -642,23 +677,83 @@ export default function App() {
         onSave={handleSave}
         onLoad={handleLoad}
       />
-      <div style={{
-        position: 'absolute',
-        bottom: 8,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'rgba(0,0,0,0.55)',
-        color: '#eee',
-        fontSize: 12,
-        padding: '5px 14px',
-        borderRadius: 16,
-        userSelect: 'none',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap',
-        letterSpacing: 0.3,
-      }}>
-        Tab cycle items &nbsp;&bull;&nbsp; Click to select &nbsp;&bull;&nbsp; R rotate &nbsp;&bull;&nbsp; Del delete &nbsp;&bull;&nbsp; Drag to move &nbsp;&bull;&nbsp; &larr; &rarr; &uarr; &darr; nudge
-      </div>
+      {/* Deselect hint */}
+      {mode === 'build' && selectedItemId && (
+        <button
+          onClick={() => setSelectedItemId(null)}
+          style={{
+            position: 'absolute',
+            bottom: 80,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.55)',
+            color: '#eee',
+            fontSize: 12,
+            padding: '4px 12px',
+            borderRadius: 12,
+            border: 'none',
+            cursor: 'pointer',
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ✕ Deselect (Esc)
+        </button>
+      )}
+
+      {/* Floating shortcuts toggle */}
+      <button
+        onClick={() => setShowShortcuts(s => !s)}
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          right: 16,
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          border: 'none',
+          background: 'rgba(0,0,0,0.6)',
+          color: '#fff',
+          fontSize: 18,
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          userSelect: 'none',
+          zIndex: 10,
+        }}
+        title="Keyboard shortcuts"
+      >
+        ?
+      </button>
+      {showShortcuts && (
+        <div style={{
+          position: 'absolute',
+          bottom: 60,
+          right: 16,
+          background: '#fff',
+          color: '#333',
+          fontSize: 13,
+          padding: '12px 16px',
+          borderRadius: 10,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          userSelect: 'none',
+          zIndex: 10,
+          lineHeight: 1.7,
+          minWidth: 200,
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Shortcuts</div>
+          <div>Tab / Shift+Tab &mdash; cycle items</div>
+          <div>Click &mdash; select</div>
+          <div>R &mdash; rotate</div>
+          <div>Del &mdash; delete</div>
+          <div>Arrow keys &mdash; nudge</div>
+          <div>Drag &mdash; move</div>
+          <div>Esc &mdash; deselect</div>
+        </div>
+      )}
     </div>
   )
 }
