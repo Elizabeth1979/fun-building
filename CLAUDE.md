@@ -38,6 +38,25 @@ URL param `?god=true` unlocks super admin mode.
 Check with: `new URLSearchParams(window.location.search).get('god') === 'true'`
 Phase 3 will replace this with real Supabase auth.
 
+## Browser Debugging Tools
+
+### Playwright MCP (automated testing)
+Use Playwright to open the game in a browser and verify it works:
+- Take a screenshot to see what rendered
+- Click buttons and verify interactions
+- Check the page loaded without errors
+- Run after every major feature to confirm nothing broke
+
+### Browser Tools MCP (live debugging)
+Use Browser Tools to read the Chrome DevTools console while the game runs:
+- Check for Three.js errors and warnings
+- Inspect network calls
+- Read performance metrics
+- Use when something looks wrong visually and you need to see the error
+
+NOTE: Browser Tools requires the AgentDesk Chrome extension installed in Chrome.
+Install from: https://chromewebstore.google.com/detail/agentdesk-browser-tools/
+
 ## Phase 1 MVP Scope (build this only)
 1. A 3D room the player can walk around in
 2. Paint walls, floor, ceiling any color (color picker)
