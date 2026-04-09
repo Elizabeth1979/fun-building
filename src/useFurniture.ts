@@ -168,5 +168,5 @@ export function useFurniture() {
     setPlacedItems(prev => rotatePlacedItem(prev, id))
   }
 
-  return { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem }
+  return { placedItems, setPlacedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem }
 }

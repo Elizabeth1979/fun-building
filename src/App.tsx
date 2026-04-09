@@ -1,126 +1,77 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorPickerPanel } from './ColorPickerPanel'
 import { FurniturePanel } from './FurniturePanel'
 import { useRoomColors } from './useRoomColors'
-import { useFurniture, clampPosition, nudgePlacedItem, getNextItemId, getPrevItemId } from './useFurniture'
-import { saveScene, loadScene } from './persistence'
+import { useFurniture } from './useFurniture'
+import { loadScene, saveCityScene, loadCityScene } from './persistence'
 import { useGodMode } from './useGodMode'
 import { useGameMode } from './useGameMode'
 import { usePhysics } from './usePhysics'
-import type { FurnitureItem } from './furniture'
-import { FURNITURE_CATALOG, FURNITURE_DIMS, catalogIdOf } from './furniture'
-import { loadModel } from './modelLoader'
-
-function buildFallbackMesh(item: FurnitureItem): THREE.Mesh {
-  const catalogId = catalogIdOf(item)
-  const dims = FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]
-
-  let geo: THREE.BufferGeometry
-  if (item.meshType === 'cylinder') {
-    const [r, h] = dims as [number, number]
-    geo = new THREE.CylinderGeometry(r, r, h, 24)
-  } else if (item.meshType === 'sphere') {
-    const [r] = dims as [number]
-    geo = new THREE.SphereGeometry(r, 16, 16)
-  } else {
-    const [w, h, d] = dims as [number, number, number]
-    geo = new THREE.BoxGeometry(w, h, d)
-  }
-
-  const mat = new THREE.MeshLambertMaterial({ color: item.color })
-  const mesh = new THREE.Mesh(geo, mat)
-  mesh.position.set(item.position.x, item.position.y, item.position.z)
-  mesh.rotation.y = item.rotation
-  return mesh
-}
-
-async function buildFurnitureModel(item: FurnitureItem): Promise<THREE.Object3D> {
-  const catalogId = catalogIdOf(item)
-  const catalogEntry = FURNITURE_CATALOG.find(c => c.id === catalogId)
-  const modelPath = item.modelPath ?? catalogEntry?.modelPath
-
-  if (!modelPath) return buildFallbackMesh(item)
-
-  try {
-    const group = await loadModel(modelPath)
-    group.position.set(item.position.x, item.position.y, item.position.z)
-    group.rotation.y = item.rotation
-    group.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-        if (child.material instanceof THREE.MeshStandardMaterial) {
-          child.material.envMapIntensity = 1.0
-        }
-      }
-    })
-    return group
-  } catch {
-    return buildFallbackMesh(item)
-  }
-}
-
-function setEmissiveOnObject(obj: THREE.Object3D, color: number): void {
-  obj.traverse(child => {
-    if (child instanceof THREE.Mesh) {
-      const mat = child.material
-      if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
-        mat.emissive.set(color)
-      }
-    }
-  })
-}
-
-function disposeObject(obj: THREE.Object3D): void {
-  obj.traverse(child => {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose()
-      if (Array.isArray(child.material)) {
-        child.material.forEach(m => m.dispose())
-      } else {
-        child.material.dispose()
-      }
-    }
-  })
-}
-
-function findFurnitureParent(
-  hit: THREE.Object3D,
-  meshes: Map<string, THREE.Object3D>,
-): string | null {
-  const roots = new Set(meshes.values())
-  let current: THREE.Object3D | null = hit
-  while (current) {
-    if (roots.has(current)) {
-      for (const [id, obj] of meshes) {
-        if (obj === current) return id
-      }
-    }
-    current = current.parent
-  }
-  return null
-}
+import { SceneManager } from './SceneManager'
+import { buildFurnitureModel, setEmissiveOnObject, disposeObject } from './sceneHelpers'
+import { FurnitureDragHandler } from './FurnitureDragHandler'
+import { useViewMode } from './viewMode'
+import {
+  createCityHousesState,
+  placeHouse,
+  removeHouse,
+  worldToCell,
+  type CityHousesState,
+} from './cityHouses'
+import { CITY_GRID_SIZE, CITY_TILE_SIZE } from './cityGrid'
+import {
+  createHouseInteriorsStore,
+  getHouseInterior,
+  setHouseInterior,
+  type HouseInteriorsStore,
+} from './houseInteriors'
+import {
+  createCityRoadsState,
+  placeRoad,
+  removeRoad,
+  isCellOccupied,
+  type CityRoadsState,
+} from './cityRoads'
+import {
+  createNpcState,
+  spawnNpcsOnRoads,
+  updateNpcs,
+  type NpcState,
+} from './cityNpcs'
 
 export default function App() {
   const isGodMode = useGodMode()
   const { mode, toggle } = useGameMode()
+  const { viewMode, activeHouseId, toggleView, enterHouse, goToCity } = useViewMode()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const { initPhysics, stepPhysics, getFinalPositions, destroyPhysics } = usePhysics()
   const mountRef = useRef<HTMLDivElement>(null)
 
-  // Modular room piece refs — separate arrays so wall / floor colors apply independently
-  const roomWallObjectsRef = useRef<THREE.Object3D[]>([])
-  const roomFloorObjectsRef = useRef<THREE.Object3D[]>([])
-
   const { selectedSurface, setSelectedSurface, colors, setColors, setColor } = useRoomColors()
 
-  // Furniture state
-  const { placedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem } = useFurniture()
+  // City houses state
+  const [cityHouses, setCityHouses] = useState<CityHousesState>(createCityHousesState)
+  const [cityTool, setCityTool] = useState<'place' | 'remove' | 'enter' | 'road' | 'road-remove'>('place')
+  const cityHousesRef = useRef(cityHouses)
+  useEffect(() => { cityHousesRef.current = cityHouses }, [cityHouses])
 
-  // Scene + mesh refs shared between effects and event handlers
-  const sceneRef = useRef<THREE.Scene | null>(null)
+  // City roads state
+  const [cityRoads, setCityRoads] = useState<CityRoadsState>(createCityRoadsState)
+  const cityRoadsRef = useRef(cityRoads)
+  useEffect(() => { cityRoadsRef.current = cityRoads }, [cityRoads])
+
+  // NPC walker state
+  const npcStateRef = useRef<NpcState>(createNpcState())
+
+  // Per-house interior state store
+  const [houseInteriors, setHouseInteriors] = useState<HouseInteriorsStore>(createHouseInteriorsStore)
+
+  // Furniture state
+  const { placedItems, setPlacedItems, selectedItemId, setSelectedItemId, addItem, moveItem, moveItemWithChildren: moveItemWithChildrenFn, removeItem, rotateItem } = useFurniture()
+
+  // SceneManager + mesh refs shared between effects and event handlers
+  const sceneManagerRef = useRef<SceneManager | null>(null)
   const furnitureMeshesRef = useRef<Map<string, THREE.Object3D>>(new Map())
 
   // Stable function refs — updated every render so event-handler closures stay fresh
@@ -140,11 +91,67 @@ export default function App() {
   useEffect(() => { removeItemRef.current = removeItem }, [removeItem])
   useEffect(() => { selectedItemIdRef.current = selectedItemId }, [selectedItemId])
 
+  // Keep fresh refs for colors and houseInteriors for use in callbacks
+  const colorsRef = useRef(colors)
+  useEffect(() => { colorsRef.current = colors }, [colors])
+  const houseInteriorsRef = useRef(houseInteriors)
+  useEffect(() => { houseInteriorsRef.current = houseInteriors }, [houseInteriors])
+
+  // Save the current interior back to the active house (if any)
+  const saveCurrentHouseInterior = useCallback(() => {
+    const houseId = activeHouseId
+    if (!houseId) return
+    setHouseInteriors(prev =>
+      setHouseInterior(prev, houseId, {
+        colors: colorsRef.current,
+        furniture: placedItemsRef.current,
+      }),
+    )
+  }, [activeHouseId])
+
+  // Wrap enterHouse to save current + load target
+  const enterHouseWithState = useCallback((houseId: string) => {
+    saveCurrentHouseInterior()
+    enterHouse(houseId)
+    // Use a microtask to ensure houseInteriors state is flushed before loading
+    // Actually, we read from the ref which has the latest value after saveCurrentHouseInterior
+    // schedules the update. But since setHouseInteriors is async, we need to compute the
+    // interior from the current ref + the save we just did.
+    const currentActiveId = activeHouseId
+    let store = houseInteriorsRef.current
+    if (currentActiveId) {
+      store = setHouseInterior(store, currentActiveId, {
+        colors: colorsRef.current,
+        furniture: placedItemsRef.current,
+      })
+    }
+    const interior = getHouseInterior(store, houseId)
+    setColors(interior.colors)
+    setPlacedItems(interior.furniture)
+    setSelectedItemId(null)
+  }, [activeHouseId, enterHouse, saveCurrentHouseInterior, setColors, setPlacedItems, setSelectedItemId])
+
+  // Wrap goToCity to save current house first
+  const goToCityWithState = useCallback(() => {
+    saveCurrentHouseInterior()
+    goToCity()
+  }, [saveCurrentHouseInterior, goToCity])
+
+  // Wrap toggleView to save current house first
+  const toggleViewWithState = useCallback(() => {
+    saveCurrentHouseInterior()
+    toggleView()
+  }, [saveCurrentHouseInterior, toggleView])
+
   // Refs for physics state — read inside the animation loop without stale closure issues
   const isPlayModeRef = useRef(false)
   const stepPhysicsRef = useRef(stepPhysics)
   const furnitureMeshesForPhysicsRef = useRef(furnitureMeshesRef)
   useEffect(() => { stepPhysicsRef.current = stepPhysics }, [stepPhysics])
+
+  // Ref for viewMode so animation callback can check it
+  const viewModeRef = useRef(viewMode)
+  useEffect(() => { viewModeRef.current = viewMode }, [viewMode])
 
   // Enter / exit play mode
   useEffect(() => {
@@ -164,21 +171,83 @@ export default function App() {
     }
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-load saved colors on first render
+  // Auto-load saved city (v3) or room-only (v2) on first render
   useEffect(() => {
-    const saved = loadScene()
-    if (saved) setColors(saved)
+    const citySaved = loadCityScene()
+    if (citySaved) {
+      setCityHouses(citySaved.houses)
+      setCityRoads(citySaved.roads)
+      setHouseInteriors(citySaved.interiors)
+      // Restore view state
+      if (citySaved.viewMode === 'interior' && citySaved.activeHouseId) {
+        enterHouse(citySaved.activeHouseId)
+        // Load active house interior into room state
+        const interior = citySaved.interiors.interiors.get(citySaved.activeHouseId)
+        if (interior) {
+          setColors(interior.colors)
+          setPlacedItems(interior.furniture)
+        }
+      } else {
+        goToCity()
+      }
+    } else {
+      // Fallback: try loading old v2 room-only save
+      const saved = loadScene()
+      if (saved) {
+        setColors(saved.colors)
+        setPlacedItems(saved.furniture)
+      }
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSave = () => saveScene(colors)
+  const handleSave = () => {
+    // Save current interior state for active house before persisting
+    let interiorsToSave = houseInteriorsRef.current
+    if (activeHouseId) {
+      const currentInterior = { colors: colorsRef.current, furniture: placedItemsRef.current }
+      const next = new Map(interiorsToSave.interiors)
+      next.set(activeHouseId, currentInterior)
+      interiorsToSave = { interiors: next }
+      setHouseInteriors(interiorsToSave)
+    }
+    saveCityScene(
+      cityHousesRef.current,
+      cityRoadsRef.current,
+      interiorsToSave,
+      viewMode,
+      activeHouseId,
+    )
+  }
   const handleLoad = () => {
-    const saved = loadScene()
-    if (saved) setColors(saved)
+    const citySaved = loadCityScene()
+    if (citySaved) {
+      setCityHouses(citySaved.houses)
+      setCityRoads(citySaved.roads)
+      setHouseInteriors(citySaved.interiors)
+      if (citySaved.viewMode === 'interior' && citySaved.activeHouseId) {
+        enterHouse(citySaved.activeHouseId)
+        const interior = citySaved.interiors.interiors.get(citySaved.activeHouseId)
+        if (interior) {
+          setColors(interior.colors)
+          setPlacedItems(interior.furniture)
+        }
+      } else {
+        goToCity()
+      }
+    } else {
+      const saved = loadScene()
+      if (saved) {
+        setColors(saved.colors)
+        setPlacedItems(saved.furniture)
+      }
+    }
   }
 
   // Sync color state → modular room pieces
   useEffect(() => {
-    for (const obj of roomWallObjectsRef.current) {
+    const mgr = sceneManagerRef.current
+    if (!mgr) return
+    for (const obj of mgr.roomWallObjects) {
       obj.traverse(child => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.color.set(colors.walls)
@@ -187,7 +256,9 @@ export default function App() {
     }
   }, [colors.walls])
   useEffect(() => {
-    for (const obj of roomFloorObjectsRef.current) {
+    const mgr = sceneManagerRef.current
+    if (!mgr) return
+    for (const obj of mgr.roomFloorObjects) {
       obj.traverse(child => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
           child.material.color.set(colors.floor)
@@ -198,8 +269,9 @@ export default function App() {
 
   // Sync placedItems → Three.js meshes (add / remove / reposition)
   useEffect(() => {
-    const scene = sceneRef.current
-    if (!scene) return
+    const mgr = sceneManagerRef.current
+    if (!mgr) return
+    const scene = mgr.scene
     const meshes = furnitureMeshesRef.current
     const liveIds = new Set(placedItems.map(i => i.id))
 
@@ -241,503 +313,191 @@ export default function App() {
     }
   }, [selectedItemId])
 
+  // Ref to hold drag handler so we can dispose/recreate on view switch
+  const dragHandlerRef = useRef<FurnitureDragHandler | null>(null)
+
+  // Switch between city and interior views
+  useEffect(() => {
+    const mgr = sceneManagerRef.current
+    if (!mgr) return
+
+    if (viewMode === 'city') {
+      // Hide room and furniture, show city
+      for (const obj of mgr.roomWallObjects) obj.visible = false
+      for (const obj of mgr.roomFloorObjects) obj.visible = false
+      for (const obj of furnitureMeshesRef.current.values()) obj.visible = false
+      // Disable drag handler in city view
+      if (dragHandlerRef.current) {
+        dragHandlerRef.current.dispose()
+        dragHandlerRef.current = null
+      }
+      mgr.clearCityScene()
+      mgr.buildCityScene()
+      // Render existing houses and roads
+      const allHouses = Array.from(cityHousesRef.current.houses.values())
+      mgr.syncHouseMeshes(allHouses)
+      mgr.syncRoadMeshes(cityRoadsRef.current)
+    } else {
+      // Show room and furniture, hide city
+      mgr.clearCityScene()
+      for (const obj of mgr.roomWallObjects) obj.visible = true
+      for (const obj of mgr.roomFloorObjects) obj.visible = true
+      for (const obj of furnitureMeshesRef.current.values()) obj.visible = true
+      mgr.resetInteriorCamera()
+    }
+  }, [viewMode])
+
+  // Sync house meshes when cityHouses changes (while in city view)
+  useEffect(() => {
+    const mgr = sceneManagerRef.current
+    if (!mgr || viewMode !== 'city') return
+    const allHouses = Array.from(cityHouses.houses.values())
+    mgr.syncHouseMeshes(allHouses)
+  }, [cityHouses, viewMode])
+
+  // Sync road meshes when cityRoads changes (while in city view)
+  useEffect(() => {
+    const mgr = sceneManagerRef.current
+    if (!mgr || viewMode !== 'city') return
+    mgr.syncRoadMeshes(cityRoads)
+  }, [cityRoads, viewMode])
+
+  // Spawn/despawn NPCs when roads change or entering/leaving city view
+  useEffect(() => {
+    if (viewMode === 'city') {
+      const MAX_NPCS = 4
+      npcStateRef.current = spawnNpcsOnRoads(cityRoads, MAX_NPCS)
+    } else {
+      npcStateRef.current = createNpcState()
+      const mgr = sceneManagerRef.current
+      if (mgr) mgr.clearNpcMeshes()
+    }
+  }, [cityRoads, viewMode])
+
+  // City click handler
+  useEffect(() => {
+    const mgr = sceneManagerRef.current
+    if (!mgr || viewMode !== 'city') return
+
+    const handleCityClick = (event: MouseEvent) => {
+      // First, check if we clicked a house
+      const houseId = mgr.raycastHouse(event)
+
+      if (cityTool === 'enter' && houseId) {
+        enterHouseWithState(houseId)
+        return
+      }
+
+      if (cityTool === 'remove' && houseId) {
+        // Find the house to get its cell
+        for (const [, house] of cityHousesRef.current.houses) {
+          if (house.id === houseId) {
+            setCityHouses(prev => removeHouse(prev, house.cellX, house.cellZ))
+            return
+          }
+        }
+        return
+      }
+
+      if (cityTool === 'road' || cityTool === 'road-remove') {
+        const point = mgr.raycastGround(event)
+        if (point) {
+          const cell = worldToCell(point.x, point.z, CITY_GRID_SIZE, CITY_TILE_SIZE)
+          if (cityTool === 'road') {
+            // Only place road if cell is not occupied
+            if (!isCellOccupied(cell.cellX, cell.cellZ, cityRoadsRef.current, cityHousesRef.current)) {
+              setCityRoads(prev => placeRoad(prev, cell.cellX, cell.cellZ))
+            }
+          } else {
+            setCityRoads(prev => removeRoad(prev, cell.cellX, cell.cellZ))
+          }
+        }
+        return
+      }
+
+      if (cityTool === 'place') {
+        // If clicked a house, enter it instead
+        if (houseId) {
+          enterHouseWithState(houseId)
+          return
+        }
+        // Otherwise place on ground (only if cell not occupied)
+        const point = mgr.raycastGround(event)
+        if (point) {
+          const cell = worldToCell(point.x, point.z, CITY_GRID_SIZE, CITY_TILE_SIZE)
+          if (!isCellOccupied(cell.cellX, cell.cellZ, cityRoadsRef.current, cityHousesRef.current)) {
+            setCityHouses(prev => placeHouse(prev, cell.cellX, cell.cellZ))
+          }
+        }
+      }
+    }
+
+    const canvas = mgr.renderer.domElement
+    canvas.addEventListener('click', handleCityClick)
+    return () => canvas.removeEventListener('click', handleCityClick)
+  }, [viewMode, cityTool, enterHouseWithState])
+
   // Main Three.js setup — runs once on mount
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.setPixelRatio(window.devicePixelRatio)
-    renderer.setSize(mount.clientWidth, mount.clientHeight)
-    mount.appendChild(renderer.domElement)
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(60, mount.clientWidth / mount.clientHeight, 0.1, 100)
-    camera.position.set(0, 2, 6)
-
-    // OrbitControls
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 2, 0)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.05
-    controls.update()
-
-    // Scene
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x87ceeb)
-    sceneRef.current = scene
-
-    // Lighting — no PMREMGenerator, just ambient + directional
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2)
-    dirLight.position.set(5, 10, 5)
-    dirLight.castShadow = true
-    dirLight.shadow.mapSize.width = 1024
-    dirLight.shadow.mapSize.height = 1024
-    dirLight.shadow.camera.near = 0.1
-    dirLight.shadow.camera.far = 50
-    scene.add(dirLight)
-
-    // Build modular room from Kenney GLTF pieces
-    const roomWallObjects: THREE.Object3D[] = []
-    const roomFloorObjects: THREE.Object3D[] = []
-
-    async function buildModularRoom() {
-      // Load one of each piece to measure actual tile dimensions
-      const sampleFloor = await loadModel('/models/room/floorFull.glb')
-      const floorBox = new THREE.Box3().setFromObject(sampleFloor)
-      const floorSize = floorBox.getSize(new THREE.Vector3())
-      const tileW = floorSize.x // width of one floor tile
-      const tileD = floorSize.z // depth of one floor tile
-
-      const sampleWall = await loadModel('/models/room/wall.glb')
-      const wallBox = new THREE.Box3().setFromObject(sampleWall)
-      const wallSize = wallBox.getSize(new THREE.Vector3())
-      const wallW = wallSize.x // width of one wall segment
-
-      // Dispose measurement samples
-      disposeObject(sampleFloor)
-      disposeObject(sampleWall)
-
-      const roomHalf = 5 // room is 10×10, centered at origin
-
-      // Floor tiles — grid centered at origin
-      const tilesX = Math.round(roomHalf * 2 / tileW)
-      const tilesZ = Math.round(roomHalf * 2 / tileD)
-      for (let ix = 0; ix < tilesX; ix++) {
-        for (let iz = 0; iz < tilesZ; iz++) {
-          const tile = await loadModel('/models/room/floorFull.glb')
-          tile.position.set(
-            -roomHalf + tileW / 2 + ix * tileW,
-            0,
-            -roomHalf + tileD / 2 + iz * tileD,
-          )
-          tile.traverse(child => {
-            if (child instanceof THREE.Mesh) {
-              child.receiveShadow = true
-            }
-          })
-          scene.add(tile)
-          roomFloorObjects.push(tile)
+    // Create SceneManager — owns renderer, camera, controls, scene, lights, resize, animation
+    let lastTime = performance.now()
+    const mgr = new SceneManager(mount, {
+      onAnimationFrame: () => {
+        if (isPlayModeRef.current) {
+          stepPhysicsRef.current(furnitureMeshesForPhysicsRef.current.current)
         }
-      }
-
-      const wallSegments = Math.round(roomHalf * 2 / wallW)
-
-      // Helper: place a row of wall tiles
-      async function placeWallRow(
-        modelPath: string,
-        count: number,
-        getPosition: (i: number) => [number, number, number],
-        rotationY: number,
-        skipIndices?: Set<number>,
-        replacements?: Map<number, string>,
-      ) {
-        for (let i = 0; i < count; i++) {
-          if (skipIndices?.has(i)) continue
-          const path = replacements?.get(i) ?? modelPath
-          const piece = await loadModel(path)
-          const [px, py, pz] = getPosition(i)
-          piece.position.set(px, py, pz)
-          piece.rotation.y = rotationY
-          piece.traverse(child => {
-            if (child instanceof THREE.Mesh) {
-              child.castShadow = true
-              child.receiveShadow = true
-            }
-          })
-          scene.add(piece)
-          roomWallObjects.push(piece)
+        // Update NPC walkers in city view
+        if (viewModeRef.current === 'city') {
+          const now = performance.now()
+          const dt = Math.min((now - lastTime) / 1000, 0.1) // cap delta
+          lastTime = now
+          npcStateRef.current = updateNpcs(npcStateRef.current, cityRoadsRef.current, dt)
+          mgr.syncNpcMeshes(npcStateRef.current)
+        } else {
+          lastTime = performance.now()
         }
-      }
+      },
+    })
+    sceneManagerRef.current = mgr
 
-      // Back wall (z = -roomHalf): faces +z (rotation 0)
-      await placeWallRow(
-        '/models/room/wall.glb',
-        wallSegments,
-        i => [-roomHalf + wallW / 2 + i * wallW, 0, -roomHalf],
-        0,
-      )
+    const { scene, camera, renderer, controls } = mgr
 
-      // Front wall (z = +roomHalf): faces -z (rotation PI)
-      // Center tile(s) use doorway for an entrance
-      const frontCenter = Math.floor(wallSegments / 2)
-      await placeWallRow(
-        '/models/room/wall.glb',
-        wallSegments,
-        i => [-roomHalf + wallW / 2 + i * wallW, 0, roomHalf],
-        Math.PI,
-        undefined,
-        new Map([[frontCenter, '/models/room/wallDoorwayWide.glb']]),
-      )
+    // Build the modular room (async, runs in background)
+    mgr.buildModularRoom(colors.walls, colors.floor)
 
-      // Left wall (x = -roomHalf): faces +x (rotation PI/2)
-      await placeWallRow(
-        '/models/room/wall.glb',
-        wallSegments,
-        i => [-roomHalf, 0, -roomHalf + wallW / 2 + i * wallW],
-        Math.PI / 2,
-      )
+    // Start animation loop
+    mgr.start()
 
-      // Right wall (x = +roomHalf): faces -x (rotation -PI/2)
-      await placeWallRow(
-        '/models/room/wall.glb',
-        wallSegments,
-        i => [roomHalf, 0, -roomHalf + wallW / 2 + i * wallW],
-        -Math.PI / 2,
-      )
-
-      // Corner pieces at the two back corners
-      for (const [cx, cz, cr] of [
-        [-roomHalf, -roomHalf, 0],
-        [roomHalf, -roomHalf, -Math.PI / 2],
-        [-roomHalf, roomHalf, Math.PI / 2],
-        [roomHalf, roomHalf, Math.PI],
-      ] as [number, number, number][]) {
-        const corner = await loadModel('/models/room/wallCorner.glb')
-        corner.position.set(cx, 0, cz)
-        corner.rotation.y = cr
-        corner.traverse(child => {
-          if (child instanceof THREE.Mesh) {
-            child.castShadow = true
-            child.receiveShadow = true
-          }
-        })
-        scene.add(corner)
-        roomWallObjects.push(corner)
-      }
-
-      // Store refs for color updates
-      roomWallObjectsRef.current = roomWallObjects
-      roomFloorObjectsRef.current = roomFloorObjects
-
-      // Apply initial colors
-      for (const obj of roomWallObjects) {
-        obj.traverse(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-            child.material.color.set(colors.walls)
-          }
-        })
-      }
-      for (const obj of roomFloorObjects) {
-        obj.traverse(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-            child.material.color.set(colors.floor)
-          }
-        })
-      }
-    }
-
-    buildModularRoom()
-
-    // Drag-and-drop raycasting state
-    const raycaster = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
-    const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    const dragTarget = new THREE.Vector3()
-    let isDragging = false
-    let dragItemId: string | null = null
-    let dragItemY = 0
-    let currentRestingOnId: string | null = null
-
-    function toNDC(e: MouseEvent) {
-      const rect = renderer.domElement.getBoundingClientRect()
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-    }
-
-    function onMouseDown(e: MouseEvent) {
-      mount?.focus()
-      if (isPlayModeRef.current) return // no dragging during physics
-      toNDC(e)
-      raycaster.setFromCamera(mouse, camera)
-      // Collect all child meshes for raycasting (GLTF models are groups)
-      const allMeshes: THREE.Object3D[] = []
-      for (const obj of furnitureMeshesRef.current.values()) {
-        obj.traverse(child => { if (child instanceof THREE.Mesh) allMeshes.push(child) })
-      }
-      const hits = raycaster.intersectObjects(allMeshes)
-      if (hits.length > 0) {
-        const hitId = findFurnitureParent(hits[0].object, furnitureMeshesRef.current)
-        if (hitId) {
-          setSelectedItemIdRef.current(hitId)
-          isDragging = true
-          dragItemId = hitId
-          dragItemY = placedItemsRef.current.find(i => i.id === hitId)?.position.y ?? 0
-          controls.enabled = false
-        }
-      } else {
-        setSelectedItemIdRef.current(null)
-      }
-    }
-
-    function onMouseMove(e: MouseEvent) {
-      if (!isDragging || dragItemId === null) return
-      toNDC(e)
-      raycaster.setFromCamera(mouse, camera)
-
-      const item = placedItemsRef.current.find(i => i.id === dragItemId)
-      const catalogId = item ? catalogIdOf(item) : null
-      const dims = catalogId ? (FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]) : [0.5, 0.5, 0.5]
-      const halfW = item?.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
-      const halfD = item?.meshType === 'box' ? (dims[2] as number) / 2 : halfW
-      const halfH = item?.meshType === 'cylinder' ? (dims[1] as number) / 2
-        : item?.meshType === 'sphere' ? (dims[0] as number)
-        : (dims[1] as number) / 2
-
-      // Raycast against other furniture first to allow placing items on top
-      const otherMeshes: THREE.Object3D[] = []
-      for (const [id, obj] of furnitureMeshesRef.current) {
-        if (id === dragItemId) continue
-        obj.traverse(child => { if (child instanceof THREE.Mesh) otherMeshes.push(child) })
-      }
-      const furnitureHits = raycaster.intersectObjects(otherMeshes)
-
-      let targetX: number
-      let targetY: number
-      let targetZ: number
-      let restingOnId: string | null = null
-
-      if (furnitureHits.length > 0) {
-        // Find the hit with the highest y (top surface), not just nearest to camera
-        let bestHit = furnitureHits[0]
-        for (const h of furnitureHits) {
-          if (h.point.y > bestHit.point.y) bestHit = h
-        }
-        const hitId = findFurnitureParent(bestHit.object, furnitureMeshesRef.current)
-        targetX = bestHit.point.x
-        targetY = bestHit.point.y + halfH
-        targetZ = bestHit.point.z
-        restingOnId = hitId
-      } else if (raycaster.ray.intersectPlane(floorPlane, dragTarget)) {
-        // Fall back to floor plane
-        targetX = dragTarget.x
-        targetY = dragItemY
-        targetZ = dragTarget.z
-      } else {
-        return
-      }
-
-      const clamped = clampPosition({ x: targetX, z: targetZ }, halfW, halfD, 5)
-
-      // Box3 collision check: reject move if it would overlap another item
-      // Skip collision with the item we're resting on (intentionally touching)
-      const draggedObj = furnitureMeshesRef.current.get(dragItemId)
-      if (draggedObj) {
-        const prevPos = draggedObj.position.clone()
-        draggedObj.position.set(clamped.x, targetY, clamped.z)
-        draggedObj.updateWorldMatrix(true, true)
-        const draggedBox = new THREE.Box3().setFromObject(draggedObj)
-        draggedBox.expandByScalar(0.05)
-        const dragOtherCount = furnitureMeshesRef.current.size - 1
-        let dragIntersectCount = 0
-        for (const [id, obj] of furnitureMeshesRef.current) {
-          if (id === dragItemId) continue
-          if (id === restingOnId) continue // skip the item we're stacking on
-          obj.updateWorldMatrix(true, true)
-          const otherBox = new THREE.Box3().setFromObject(obj)
-          otherBox.expandByScalar(0.05)
-          if (draggedBox.intersectsBox(otherBox)) {
-            dragIntersectCount++
-          }
-        }
-        // If intersects more than half of items, bounding box is broken — skip collision
-        const dragBlocked = dragIntersectCount > 0 && dragOtherCount > 0 && dragIntersectCount <= dragOtherCount / 2
-        if (dragBlocked) {
-          draggedObj.position.copy(prevPos)
-          return
-        }
-      }
-
-      currentRestingOnId = restingOnId
-      moveItemRef.current(dragItemId, { x: clamped.x, y: targetY, z: clamped.z }, restingOnId)
-    }
-
-    function onMouseUp() {
-      isDragging = false
-      dragItemId = null
-      controls.enabled = true
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      // Tab / Shift+Tab: cycle through placed furniture items
-      // Skip key repeats so holding Tab doesn't cycle through all items at once
-      if (e.key === 'Tab' && !isPlayModeRef.current) {
-        e.preventDefault()
-        if (e.repeat) return
-        const items = placedItemsRef.current
-        const current = selectedItemIdRef.current
-        const nextId = e.shiftKey
-          ? getPrevItemId(items, current)
-          : getNextItemId(items, current)
-        setSelectedItemIdRef.current(nextId)
-        return
-      }
-
-      // Escape: deselect current item
-      if (e.key === 'Escape') {
-        setSelectedItemIdRef.current(null)
-        return
-      }
-
-      const selId = selectedItemIdRef.current
-      if (selId && !isPlayModeRef.current) {
-        if (e.key === 'r' || e.key === 'R') {
-          rotateItemRef.current(selId)
-        }
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          e.preventDefault()
-          removeItemRef.current(selId)
-        }
-
-        // Arrow-key nudge
-        let dx = 0
-        let dz = 0
-        if (e.key === 'ArrowLeft') dx = -0.1
-        else if (e.key === 'ArrowRight') dx = 0.1
-        else if (e.key === 'ArrowUp') dz = -0.1
-        else if (e.key === 'ArrowDown') dz = 0.1
-
-        if (dx !== 0 || dz !== 0) {
-          e.preventDefault()
-          const item = placedItemsRef.current.find(i => i.id === selId)
-          if (!item) return
-          const catalogId = catalogIdOf(item)
-          const dims = FURNITURE_DIMS[catalogId] ?? [0.5, 0.5, 0.5]
-          const halfW = item.meshType === 'cylinder' ? (dims[0] as number) : (dims[0] as number) / 2
-          const halfD = item.meshType === 'box' ? (dims[2] as number) / 2 : halfW
-
-          const nudged = nudgePlacedItem(placedItemsRef.current, selId, dx, dz, halfW, halfD, 5)
-          const nudgedItem = nudged.find(i => i.id === selId)
-          if (!nudgedItem) return
-
-          // Box3 collision check (same pattern as drag)
-          // Skip the item we're resting on (intentionally touching)
-          const obj = furnitureMeshesRef.current.get(selId)
-          if (obj) {
-            const prevPos = obj.position.clone()
-            obj.position.set(nudgedItem.position.x, nudgedItem.position.y, nudgedItem.position.z)
-            obj.updateWorldMatrix(true, true)
-            const nudgedBox = new THREE.Box3().setFromObject(obj)
-            nudgedBox.expandByScalar(0.05)
-
-            // Count how many other items we intersect with
-            const otherCount = furnitureMeshesRef.current.size - 1
-            let intersectCount = 0
-            let blocked = false
-            for (const [id, other] of furnitureMeshesRef.current) {
-              if (id === selId) continue
-              if (id === currentRestingOnId) continue
-              other.updateWorldMatrix(true, true)
-              const otherBox = new THREE.Box3().setFromObject(other)
-              otherBox.expandByScalar(0.05)
-              if (nudgedBox.intersectsBox(otherBox)) {
-                intersectCount++
-              }
-            }
-
-            // If the dragged item intersects more than half of all others,
-            // its bounding box is probably broken — skip collision check
-            if (intersectCount > 0 && otherCount > 0 && intersectCount <= otherCount / 2) {
-              blocked = true
-              // eslint-disable-next-line no-console
-              const boxSize = nudgedBox.getSize(new THREE.Vector3())
-              console.warn(
-                `[nudge] Item "${selId}" blocked — box size:`,
-                boxSize.x.toFixed(2), boxSize.y.toFixed(2), boxSize.z.toFixed(2),
-                `intersects ${intersectCount}/${otherCount} items`,
-              )
-            } else if (intersectCount > otherCount / 2) {
-              // eslint-disable-next-line no-console
-              const boxSize = nudgedBox.getSize(new THREE.Vector3())
-              console.warn(
-                `[nudge] Item "${selId}" has oversized bounding box — skipping collision.`,
-                'Box size:', boxSize.x.toFixed(2), boxSize.y.toFixed(2), boxSize.z.toFixed(2),
-                `intersects ${intersectCount}/${otherCount} items`,
-              )
-            }
-            if (blocked) {
-              obj.position.copy(prevPos)
-              return
-            }
-
-            // If we moved off the supporting item, clear restingOnId
-            if (currentRestingOnId) {
-              const supportObj = furnitureMeshesRef.current.get(currentRestingOnId)
-              if (supportObj) {
-                supportObj.updateWorldMatrix(true, true)
-                const supportBox = new THREE.Box3().setFromObject(supportObj)
-                supportBox.expandByScalar(0.05)
-                if (!nudgedBox.intersectsBox(supportBox)) {
-                  currentRestingOnId = null
-                }
-              }
-            }
-          }
-
-          // If item has a parent, nudge only this item (relative on top of parent)
-          // If no parent, use moveItemWithChildren so children follow
-          if (item.parentId) {
-            moveItemRef.current(selId, nudgedItem.position, item.parentId)
-          } else {
-            moveItemWithChildrenRef.current(selId, nudgedItem.position)
-          }
-        }
-      }
-    }
-
-    renderer.domElement.addEventListener('mousedown', onMouseDown)
-    renderer.domElement.addEventListener('mousemove', onMouseMove)
-    renderer.domElement.addEventListener('mouseup', onMouseUp)
-    mount.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keydown', onKeyDown)
-
-    // Resize handler
-    function onResize() {
-      if (!mount) return
-      camera.aspect = mount.clientWidth / mount.clientHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(mount.clientWidth, mount.clientHeight)
-    }
-    window.addEventListener('resize', onResize)
-
-    // Animation loop
-    let animId: number
-    function animate() {
-      animId = requestAnimationFrame(animate)
-      if (isPlayModeRef.current) {
-        stepPhysicsRef.current(furnitureMeshesForPhysicsRef.current.current)
-      }
-      controls.update()
-      renderer.render(scene, camera)
-    }
-    animate()
+    // Set up drag/drop, raycasting, and keyboard interaction handler
+    const dragHandler = new FurnitureDragHandler({
+      mount,
+      camera,
+      renderer,
+      controls,
+      furnitureMeshes: furnitureMeshesRef.current,
+      getPlacedItems: () => placedItemsRef.current,
+      getSelectedItemId: () => selectedItemIdRef.current,
+      getIsPlayMode: () => isPlayModeRef.current,
+      setSelectedItemId: (id) => setSelectedItemIdRef.current(id),
+      moveItem: (id, pos, restingOnId) => moveItemRef.current(id, pos, restingOnId),
+      moveItemWithChildren: (id, pos) => moveItemWithChildrenRef.current(id, pos),
+      rotateItem: (id) => rotateItemRef.current(id),
+      removeItem: (id) => removeItemRef.current(id),
+    })
 
     return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('resize', onResize)
-      mount.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keydown', onKeyDown)
-      renderer.domElement.removeEventListener('mousedown', onMouseDown)
-      renderer.domElement.removeEventListener('mousemove', onMouseMove)
-      renderer.domElement.removeEventListener('mouseup', onMouseUp)
-      controls.dispose()
-      // Clean up modular room pieces
-      for (const obj of roomWallObjects) { scene.remove(obj); disposeObject(obj) }
-      for (const obj of roomFloorObjects) { scene.remove(obj); disposeObject(obj) }
-      roomWallObjectsRef.current = []
-      roomFloorObjectsRef.current = []
+      dragHandler.dispose()
+      // Clean up furniture meshes (room pieces cleaned up by SceneManager.dispose)
       for (const obj of furnitureMeshesRef.current.values()) {
         scene.remove(obj)
         disposeObject(obj)
       }
       furnitureMeshesRef.current.clear()
-      renderer.dispose()
-      mount.removeChild(renderer.domElement)
-      sceneRef.current = null
+      mgr.dispose()
+      sceneManagerRef.current = null
     }
   }, [])
 
@@ -745,8 +505,8 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={mountRef} tabIndex={0} style={{ width: '100%', height: '100%', outline: 'none' }} />
 
-      {/* Build / Play toggle — centered at top */}
-      <div style={{
+      {/* Build / Play toggle — centered at top (interior only) */}
+      {viewMode === 'interior' && <div style={{
         position: 'absolute',
         top: 16,
         left: '50%',
@@ -788,7 +548,87 @@ export default function App() {
         >
           ▶ Play
         </button>
-      </div>
+      </div>}
+
+      {/* View mode toggle — top-left */}
+      <button
+        onClick={viewMode === 'interior' && activeHouseId ? goToCityWithState : toggleViewWithState}
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          padding: '8px 18px',
+          fontWeight: 700,
+          fontSize: 14,
+          border: 'none',
+          borderRadius: 20,
+          cursor: 'pointer',
+          background: viewMode === 'city' ? '#1565c0' : '#6a1b9a',
+          color: '#fff',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+          userSelect: 'none',
+          transition: 'background 0.2s',
+          zIndex: 10,
+        }}
+      >
+        {viewMode === 'interior'
+          ? (activeHouseId ? '← Back to City' : '🏙️ City View')
+          : '🏠 Interior View'}
+      </button>
+
+      {/* City tool bar */}
+      {viewMode === 'city' && (
+        <div style={{
+          position: 'absolute',
+          top: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: 0,
+          borderRadius: 24,
+          overflow: 'hidden',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+          userSelect: 'none',
+        }}>
+          {([['place', '🏠 Place'], ['remove', '🗑️ Remove'], ['enter', '🚪 Enter'], ['road', '🛣️ Road'], ['road-remove', '🚫 Road']] as const).map(([tool, label]) => (
+            <button
+              key={tool}
+              onClick={() => setCityTool(tool)}
+              style={{
+                padding: '8px 18px',
+                fontWeight: 700,
+                fontSize: 13,
+                border: 'none',
+                cursor: 'pointer',
+                background: cityTool === tool ? '#1565c0' : '#555',
+                color: cityTool === tool ? '#fff' : '#bbb',
+                transition: 'background 0.2s, color 0.2s',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Active house indicator */}
+      {viewMode === 'interior' && activeHouseId && (
+        <div style={{
+          position: 'absolute',
+          top: 56,
+          left: 16,
+          background: 'rgba(0,0,0,0.6)',
+          color: '#fff',
+          fontSize: 12,
+          padding: '4px 10px',
+          borderRadius: 8,
+          userSelect: 'none',
+          pointerEvents: 'none',
+          zIndex: 10,
+        }}>
+          Editing: {activeHouseId}
+        </div>
+      )}
 
       {isGodMode && (
         <div style={{
@@ -810,7 +650,7 @@ export default function App() {
           ⚡ GOD MODE
         </div>
       )}
-      {mode === 'build' && <FurniturePanel onPlaceItem={addItem} />}
+      {viewMode === 'interior' && mode === 'build' && <FurniturePanel onPlaceItem={addItem} />}
       {mode === 'build' && selectedItemId && (
         <button
           onClick={() => rotateItem(selectedItemId)}
@@ -860,14 +700,14 @@ export default function App() {
           🔗
         </div>
       )}
-      <ColorPickerPanel
+      {viewMode === 'interior' && <ColorPickerPanel
         selectedSurface={selectedSurface}
         onSurfaceChange={setSelectedSurface}
         colors={colors}
         onColorChange={setColor}
         onSave={handleSave}
         onLoad={handleLoad}
-      />
+      />}
       {/* Deselect hint */}
       {mode === 'build' && selectedItemId && (
         <button
